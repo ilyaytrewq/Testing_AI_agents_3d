@@ -1,7 +1,9 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -49,6 +51,11 @@ def create_app(
         lifespan=lifespan,
     )
     app.state.settings = configuration
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(_request: Request, _error: RequestValidationError) -> JSONResponse:
+        return JSONResponse({"error": {"code": "invalid_request"}}, status_code=422)
+
     auth = configuration.app.auth
     app.add_middleware(
         AuthMiddleware,

@@ -53,13 +53,23 @@ async def test_authorized_guest_can_send_and_read_shared_history() -> None:
     generator = Generator()
     app = create_app(settings, guests=Guests(), repository=Repository(), generator=generator)
     async with (
-        AsyncClient(transport=ASGITransport(app), base_url=ORIGIN) as alice,
+        AsyncClient(
+            transport=ASGITransport(app, raise_app_exceptions=False), base_url=ORIGIN
+        ) as alice,
         AsyncClient(transport=ASGITransport(app), base_url=ORIGIN) as bob,
     ):
         assert (await alice.get("/api/messages")).status_code == 401
         assert (await alice.post("/api/session", headers=HEADERS)).status_code == 204
         invalid = await alice.post("/api/messages", headers=HEADERS, json={"text": "   "})
         assert invalid.status_code == 422
+        for malformed in (b'{"text":"\\ud800"}', b'{"text":1e400}', b'{"text":"x","user_id":"y"}'):
+            response = await alice.post(
+                "/api/messages",
+                headers={"Origin": ORIGIN, "Content-Type": "application/json"},
+                content=malformed,
+            )
+            assert response.status_code == 422
+            assert response.json() == {"error": {"code": "invalid_request"}}
         assert not generator.inputs
         sent = await alice.post("/api/messages", headers=HEADERS, json={"text": "Espresso ratio?"})
         assert sent.status_code == 201

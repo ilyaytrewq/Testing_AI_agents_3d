@@ -11,7 +11,9 @@ class ChatRepository(Protocol):
 
 
 class TextGenerator(Protocol):
-    async def generate(self, text: str) -> str: ...
+    async def generate(self, text: str) -> str:
+        """Return text or raise GenerationError (GenerationTimeout for a deadline)."""
+        ...
 
 
 class GuestRepository(Protocol):
