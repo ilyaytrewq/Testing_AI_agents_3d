@@ -17,12 +17,6 @@ from pydantic import (
     field_validator,
     model_validator,
 )
-from pydantic_settings import (
-    BaseSettings,
-    PydanticBaseSettingsSource,
-    SettingsConfigDict,
-    SettingsError,
-)
 from yaml import YAMLError, safe_load
 
 ACCESS_KEY_PATTERN = compile_pattern(r"[A-Za-z0-9_-]{8,255}")
@@ -89,30 +83,39 @@ class AuthSettings(ConfigSection):
         return str(canonical).removesuffix("/")
 
 
-class AppSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_prefix="APP_",
-        env_nested_delimiter="__",
-        extra="forbid",
-        frozen=True,
-        hide_input_in_errors=True,
-    )
+class AppSettings(ConfigSection):
     chat: ChatSettings = ChatSettings()
     llm: ModelSettings
     db: DatabaseSettings = DatabaseSettings()
     auth: AuthSettings = AuthSettings()
 
-    @classmethod
-    def settings_customise_sources(
-        cls,
-        settings_cls: type[BaseSettings],
-        init_settings: PydanticBaseSettingsSource,
-        env_settings: PydanticBaseSettingsSource,
-        dotenv_settings: PydanticBaseSettingsSource,
-        file_secret_settings: PydanticBaseSettingsSource,
-    ) -> tuple[PydanticBaseSettingsSource, ...]:
-        # The initializer receives YAML values, below the process environment.
-        return env_settings, init_settings
+
+APP_SECTIONS: dict[str, type[ConfigSection]] = {
+    "chat": ChatSettings,
+    "llm": ModelSettings,
+    "db": DatabaseSettings,
+    "auth": AuthSettings,
+}
+
+
+def _apply_environment_overrides(raw: object) -> dict[str, object]:
+    if not isinstance(raw, dict) or any(
+        not isinstance(name, str) or name not in APP_SECTIONS for name in raw
+    ):
+        raise ValueError("expected a mapping of application sections")
+    values: dict[str, object] = dict(raw)
+    for section, schema in APP_SECTIONS.items():
+        previous = values.get(section, {})
+        if not isinstance(previous, dict):
+            raise ValueError("expected each application section to be a mapping")
+        overrides: dict[str, str] = {}
+        for field_name in schema.model_fields:
+            env_name = f"APP_{section.upper()}__{field_name.upper()}"
+            if env_name in environ:
+                overrides[field_name] = environ[env_name]
+        if overrides:
+            values[section] = {**previous, **overrides}
+    return values
 
 
 SECRET_NAMES = ("APP_ACCESS_KEY", "APP_SESSION_SECRET", "GEMINI_API_KEY", "DATABASE_URL")
@@ -164,13 +167,9 @@ def load_settings(
     try:
         if not config_file.is_file():
             raise ConfigurationError("Application YAML configuration file was not found.")
-        yaml_values = safe_load(config_file.read_text(encoding="utf-8"))
-        if not isinstance(yaml_values, dict) or not all(
-            isinstance(key, str) and key in AppSettings.model_fields for key in yaml_values
-        ):
-            raise ValueError("expected a mapping of application sections")
-        app = AppSettings(**yaml_values)
-    except (OSError, ValueError, YAMLError, SettingsError):
+        yaml_values: object = safe_load(config_file.read_text(encoding="utf-8"))
+        app = AppSettings.model_validate(_apply_environment_overrides(yaml_values))
+    except (OSError, ValueError, YAMLError):
         raise ConfigurationError(
             "Invalid application configuration. Check the YAML file and APP_ overrides."
         ) from None
@@ -189,7 +188,7 @@ def load_settings(
         invalid = ", ".join(sorted(locations.intersection(SECRET_NAMES)))
         detail = invalid or "check keys and use distinct access and signing secrets"
         raise ConfigurationError(f"Invalid or missing secrets: {detail}.") from None
-    except (OSError, ValueError, SettingsError):
+    except (OSError, ValueError):
         raise ConfigurationError("Could not read the local secrets file.") from None
     if app.db.backend == "postgresql" and secrets.database_url is None:
         raise ConfigurationError("DATABASE_URL is required with the postgresql backend.")

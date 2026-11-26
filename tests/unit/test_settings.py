@@ -133,3 +133,17 @@ def test_debug_logging_does_not_emit_secrets(
         "debug-fixture-provider-key",
     ):
         assert value not in caplog.text
+
+
+def test_rejected_yaml_values_are_not_logged(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from themed_chat.settings import ConfigurationError, load_settings
+
+    config = tmp_path / "app.yaml"
+    marker = "test-value-in-invalid-settings-field"
+    config.write_text(CONFIG + f"  gemini_api_key: {marker}\n", encoding="utf-8")
+    monkeypatch.setenv("PYDANTIC_SETTINGS_DEBUG", "1")
+    with caplog.at_level("DEBUG", logger="pydantic_settings"), pytest.raises(ConfigurationError):
+        load_settings(config, env_file=None)
+    assert marker not in caplog.text
