@@ -4,7 +4,10 @@ import aiosqlite
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import create_async_engine
 
+from themed_chat.adapters.database import migrate_database
 from themed_chat.app import create_app
 from themed_chat.settings import (
     AppSettings,
@@ -56,3 +59,29 @@ async def test_guest_survives_application_restart(tmp_path: Path) -> None:
         assert len(rows) == 1
         assert len(rows[0][0]) == 32
         assert rows[0][1]
+
+
+@pytest.mark.anyio
+async def test_interrupted_migration_rolls_back_before_retry(tmp_path: Path) -> None:
+    database = tmp_path / "migration.sqlite3"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{database}")
+
+    def fail_before_stamp(
+        _connection: object, _cursor: object, statement: str, *_rest: object
+    ) -> None:
+        if statement.startswith("INSERT INTO alembic_version"):
+            raise RuntimeError("injected failure before migration stamp")
+
+    event.listen(engine.sync_engine, "before_cursor_execute", fail_before_stamp)
+    try:
+        with pytest.raises(RuntimeError, match="injected failure"):
+            await migrate_database(engine)
+        event.remove(engine.sync_engine, "before_cursor_execute", fail_before_stamp)
+        await migrate_database(engine)
+        async with (
+            aiosqlite.connect(database) as connection,
+            connection.execute("SELECT version_num FROM alembic_version") as cursor,
+        ):
+            assert (await cursor.fetchone()) == ("0001_users",)
+    finally:
+        await engine.dispose()

@@ -38,8 +38,12 @@ def _upgrade(connection: Connection) -> None:
 
 
 async def migrate_database(engine: AsyncEngine) -> None:
-    if engine.url.get_backend_name() == "sqlite" and engine.url.database is not None:
+    sqlite = engine.url.get_backend_name() == "sqlite"
+    if sqlite and engine.url.database is not None:
         directory = Path(engine.url.database).parent
         await to_thread(directory.mkdir, parents=True, exist_ok=True)
     async with engine.begin() as connection:
+        if sqlite:
+            # sqlite3 legacy mode does not start a transaction before DDL on its own.
+            await connection.exec_driver_sql("BEGIN IMMEDIATE")
         await connection.run_sync(_upgrade)
