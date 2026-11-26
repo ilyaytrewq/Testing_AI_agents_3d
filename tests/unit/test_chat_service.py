@@ -39,8 +39,9 @@ async def test_invalid_text_never_calls_model(text: str) -> None:
 
 
 @pytest.mark.anyio
-async def test_empty_model_response_is_not_persisted() -> None:
-    repository, model = Repository(), Model(" \n  ")
+@pytest.mark.parametrize("answer", [" \n  ", "\ud800", "invalid\x00text"])
+async def test_invalid_model_response_is_not_persisted(answer: str) -> None:
+    repository, model = Repository(), Model(answer)
     with pytest.raises(GenerationError):
         await ChatService(repository, model).send(uuid4(), "coffee")
     assert not repository.saved

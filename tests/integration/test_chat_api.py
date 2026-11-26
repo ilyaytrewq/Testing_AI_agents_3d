@@ -21,10 +21,11 @@ class Guests:
 class Generator:
     def __init__(self) -> None:
         self.inputs: list[str] = []
+        self.reply = "Start with 18 grams."
 
     async def generate(self, text: str) -> str:
         self.inputs.append(text)
-        return "Start with 18 grams."
+        return self.reply
 
 
 class Repository:
@@ -71,6 +72,14 @@ async def test_authorized_guest_can_send_and_read_shared_history() -> None:
             assert response.status_code == 422
             assert response.json() == {"error": {"code": "invalid_request"}}
         assert not generator.inputs
+        generator.reply = "\ud800"
+        rejected = await alice.post(
+            "/api/messages", headers=HEADERS, json={"text": "Rejected answer"}
+        )
+        assert rejected.status_code == 502
+        empty_history = await alice.get("/api/messages")
+        assert empty_history.status_code == 200 and empty_history.json()["messages"] == []
+        generator.reply = "Start with 18 grams."
         sent = await alice.post("/api/messages", headers=HEADERS, json={"text": "Espresso ratio?"})
         assert sent.status_code == 201
         assert sent.json()["messages"][0]["is_mine"] is True
@@ -81,4 +90,4 @@ async def test_authorized_guest_can_send_and_read_shared_history() -> None:
         assert [m["text"] for m in messages] == ["Espresso ratio?", "Start with 18 grams."]
         assert messages[0]["is_mine"] is False
         assert datetime.fromisoformat(messages[0]["created_at"]).utcoffset() is not None
-    assert generator.inputs == ["Espresso ratio?"]
+    assert generator.inputs == ["Rejected answer", "Espresso ratio?"]
