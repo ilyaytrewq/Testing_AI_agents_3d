@@ -1,0 +1,19 @@
+services:
+  chat:
+    build: .
+    env_file: .env
+    environment:
+      APP_DB__SQLITE_PATH: /data/chat.sqlite3
+      APP_AUTH__PUBLIC_ORIGIN: ${APP_AUTH__PUBLIC_ORIGIN:-http://127.0.0.1:${CHAT_PORT:-8000}}
+    ports:
+      - "127.0.0.1:${CHAT_PORT:-8000}:8000"
+    volumes:
+      - chat-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/healthz', timeout=2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+volumes:
+  chat-data:

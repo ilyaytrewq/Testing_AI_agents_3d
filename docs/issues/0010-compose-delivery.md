@@ -2,7 +2,7 @@
 title: "Package and verify the project"
 description: "Document setup and prove the application and tests run from a clean checkout."
 id: 10
-status: "Backlog"
+status: "In progress"
 labels: []
 weight: 2
 references: {}

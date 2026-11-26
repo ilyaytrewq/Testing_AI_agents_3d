@@ -1,0 +1,11 @@
+*
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!.python-version
+!src/
+!src/**
+!config/
+!config/app.yaml
+**/__pycache__/
+**/*.pyc
