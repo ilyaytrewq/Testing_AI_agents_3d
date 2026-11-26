@@ -8,11 +8,16 @@ const input = byId("message-input");
 const send = byId("send-button");
 const history = byId("messages");
 const retry = byId("retry");
+const recovery = byId("recovery");
+const refreshHistory = byId("refresh-history");
+const allowNewSend = byId("allow-new-send");
 const maximum = 500;
 const keyPattern = /^[A-Za-z0-9_-]{8,255}$/;
 const dateFormat = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" });
 let entering = false;
 let sending = false;
+let uncertainText = null;
+let historyChecked = false;
 
 function show(section) {
   for (const panel of [start, login, chat]) panel.hidden = panel !== section;
@@ -26,7 +31,10 @@ function updateComposer() {
   const size = [...input.value].length;
   byId("message-count").textContent = `${size} / ${maximum}`;
   byId("message-count").classList.toggle("over", size > maximum);
-  send.disabled = sending || !input.value.trim() || size > maximum;
+  const blank = /^[\p{White_Space}\u001c-\u001f]*$/u.test(input.value);
+  send.disabled = sending || blank || size > maximum || (
+    uncertainText !== null && (!historyChecked || input.value === uncertainText)
+  );
 }
 
 function appendMessages(messages) {
@@ -78,6 +86,11 @@ async function loadHistory() {
     history.replaceChildren();
     appendMessages(data.messages);
     show(chat);
+    if (uncertainText !== null) {
+      historyChecked = true;
+      allowNewSend.hidden = false;
+      byId("chat-error").textContent = "История обновлена. Проверьте, появился ли ваш вопрос.";
+    }
     updateComposer();
     scrollToLatest();
     input.focus();
@@ -91,6 +104,14 @@ async function loadHistory() {
 key.addEventListener("input", updateLogin);
 input.addEventListener("input", updateComposer);
 retry.addEventListener("click", loadHistory);
+refreshHistory.addEventListener("click", loadHistory);
+allowNewSend.addEventListener("click", () => {
+  uncertainText = null;
+  recovery.hidden = true;
+  byId("chat-error").textContent = "";
+  updateComposer();
+  input.focus();
+});
 byId("login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (enter.disabled) return;
@@ -120,6 +141,8 @@ byId("message-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (send.disabled) return;
   const text = input.value;
+  uncertainText = null;
+  recovery.hidden = true;
   sending = true;
   updateComposer();
   byId("chat-error").textContent = "";
@@ -134,22 +157,39 @@ byId("message-form").addEventListener("submit", async (event) => {
       showLogin("Сессия истекла. Войдите снова.");
       return;
     }
-    if (response.status === 504) {
-      byId("chat-error").textContent = "Ассистент не успел ответить. Попробуйте ещё раз.";
-      return;
+    if (!response.ok) {
+      const failure = await response.json().catch(() => null);
+      if (response.status === 504 && failure?.detail === "model_timeout") {
+        byId("chat-error").textContent = "Ассистент не успел ответить. Попробуйте ещё раз.";
+        return;
+      }
+      if (response.status === 502 && failure?.detail === "model_unavailable") {
+        byId("chat-error").textContent = "Не удалось получить ответ. Попробуйте ещё раз.";
+        return;
+      }
+      if (response.status === 422) {
+        byId("chat-error").textContent = "Проверьте текст сообщения.";
+        return;
+      }
+      throw new Error("Unable to confirm message delivery");
     }
-    if (!response.ok) throw new Error("Unable to send message");
     const data = await response.json();
     appendMessages(data.messages);
     if (input.value === text) input.value = "";
     scrollToLatest();
     input.focus();
   } catch {
-    byId("chat-error").textContent = "Не удалось получить ответ. Попробуйте ещё раз.";
+    uncertainText = text;
+    historyChecked = false;
+    allowNewSend.hidden = true;
+    recovery.hidden = false;
+    byId("chat-error").textContent = "Не удалось подтвердить отправку. Сначала сверьтесь с историей.";
+    if (document.activeElement === document.body) refreshHistory.focus();
   } finally {
     sending = false;
     byId("chat-status").textContent = "";
     updateComposer();
+    if (!chat.hidden && document.activeElement === document.body) input.focus();
   }
 });
 

@@ -6,7 +6,7 @@ from socket import AF_INET, SOCK_STREAM, socket
 
 import pytest
 import uvicorn
-from playwright.async_api import async_playwright, expect
+from playwright.async_api import Route, async_playwright, expect
 from pydantic import SecretStr
 
 from themed_chat.app import create_app
@@ -104,5 +104,24 @@ async def test_browser_can_login_send_recover_and_reload(web_url: str) -> None:
             await expect(message).to_have_value("ошибка")
             await expect(send).to_be_enabled()
             await expect(page.locator("time")).to_have_count(2)
+
+            async def lose_reply(route: Route) -> None:
+                if route.request.method == "POST":
+                    assert (await route.fetch()).status == 201
+                    await route.abort()
+                else:
+                    await route.continue_()
+
+            await page.route("**/api/messages", lose_reply)
+            await message.fill("Нужен ли бумажный фильтр?")
+            await send.click()
+            refresh = page.get_by_role("button", name="Сверить с историей")
+            await expect(refresh).to_be_visible()
+            await expect(send).to_be_disabled()
+            await refresh.click()
+            await expect(page.get_by_text("Нужен ли бумажный фильтр?", exact=True)).to_be_visible()
+            await expect(message).to_have_value("Нужен ли бумажный фильтр?")
+            await expect(send).to_be_disabled()
+            await expect(page.locator("time")).to_have_count(4)
         finally:
             await browser.close()

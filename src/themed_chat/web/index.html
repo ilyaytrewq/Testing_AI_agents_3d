@@ -14,7 +14,8 @@
       <div class="brand" aria-hidden="true">☕</div>
       <div><p class="eyebrow">Тематический чат</p><h1 id="title">Кофейный бариста</h1></div>
     </header>
-    <section class="card" id="start" aria-labelledby="start-title">
+    <noscript><p class="card">Для входа и отправки сообщений включите JavaScript.</p></noscript>
+    <section class="card" id="start" aria-labelledby="start-title" hidden>
       <h2 id="start-title">Загружаем чат</h2>
       <p id="start-status" role="status">Проверяем сессию…</p>
       <button id="retry" type="button" hidden>Повторить загрузку</button>
@@ -51,6 +52,10 @@
         </div>
         <p id="chat-status" class="status" role="status"></p>
         <p id="chat-error" class="error" role="alert"></p>
+        <div class="recovery" id="recovery" hidden>
+          <button id="refresh-history" type="button">Сверить с историей</button>
+          <button id="allow-new-send" type="button" hidden>Разрешить повтор</button>
+        </div>
       </form>
     </section>
   </main>
