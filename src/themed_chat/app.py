@@ -26,9 +26,10 @@ def create_app(
 ) -> FastAPI:
     if repository is not None and generator is None:
         raise ValueError("Provide a text generator for the custom chat repository.")
+    if generator is not None and (guests is None) != (repository is None):
+        raise ValueError("Provide custom guest and chat repositories together.")
     configuration = settings if settings is not None else load_settings()
-    needs_database = guests is None or (generator is not None and repository is None)
-    engine = create_database_engine(configuration) if needs_database else None
+    engine = create_database_engine(configuration) if guests is None else None
     if engine is not None:
         sessions = async_sessionmaker(engine)
         if guests is None:

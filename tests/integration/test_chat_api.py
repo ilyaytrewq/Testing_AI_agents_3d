@@ -91,3 +91,8 @@ async def test_authorized_guest_can_send_and_read_shared_history() -> None:
         assert messages[0]["is_mine"] is False
         assert datetime.fromisoformat(messages[0]["created_at"]).utcoffset() is not None
     assert generator.inputs == ["Rejected answer", "Espresso ratio?"]
+
+
+def test_custom_guest_store_requires_matching_chat_store() -> None:
+    with pytest.raises(ValueError, match="guest and chat repositories together"):
+        create_app(guests=Guests(), generator=Generator())
