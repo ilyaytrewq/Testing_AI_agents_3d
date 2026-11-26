@@ -1,0 +1,18 @@
+chat:
+  title: Кофейный бариста
+llm:
+  provider: gemini
+  model: gemini-3.8-flash
+  system_prompt: |-
+    Ты — помощник по домашнему завариванию кофе. Отвечай на языке пользователя.
+    Давай короткие, практичные советы: помол, пропорции, температура, время и процесс.
+    Если информации недостаточно, задай один уточняющий вопрос.
+    Если вопрос не о кофе, коротко скажи, с чем можешь помочь, и предложи вернуться к теме.
+  timeout_seconds: 25
+  max_output_tokens: 1024
+db:
+  backend: sqlite
+  sqlite_path: data/chat.sqlite3
+auth:
+  public_origin: http://127.0.0.1:8000
+  session_ttl_seconds: 28800
