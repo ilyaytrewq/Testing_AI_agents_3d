@@ -82,6 +82,6 @@ async def test_interrupted_migration_rolls_back_before_retry(tmp_path: Path) -> 
             aiosqlite.connect(database) as connection,
             connection.execute("SELECT version_num FROM alembic_version") as cursor,
         ):
-            assert (await cursor.fetchone()) == ("0001_users",)
+            assert (await cursor.fetchone()) == ("0002_chat_turns",)
     finally:
         await engine.dispose()

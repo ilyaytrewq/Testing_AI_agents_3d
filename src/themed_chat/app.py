@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
 from themed_chat.adapters.database import create_database_engine, migrate_database
-from themed_chat.adapters.sql_repository import SqlGuestRepository
+from themed_chat.adapters.sql_repository import SqlChatRepository, SqlGuestRepository
 from themed_chat.api.auth_middleware import SESSION_COOKIE, AuthMiddleware
 from themed_chat.api.chat_routes import chat_routes
 from themed_chat.api.session_routes import session_routes
@@ -24,13 +24,18 @@ def create_app(
     repository: ChatRepository | None = None,
     generator: TextGenerator | None = None,
 ) -> FastAPI:
-    if (repository is None) != (generator is None):
-        raise ValueError("Provide both a chat repository and a text generator.")
+    if repository is not None and generator is None:
+        raise ValueError("Provide a text generator for the custom chat repository.")
     configuration = settings if settings is not None else load_settings()
-    engine = create_database_engine(configuration) if guests is None else None
-    if guests is None:
-        assert engine is not None
-        guests = SqlGuestRepository(async_sessionmaker(engine))
+    needs_database = guests is None or (generator is not None and repository is None)
+    engine = create_database_engine(configuration) if needs_database else None
+    if engine is not None:
+        sessions = async_sessionmaker(engine)
+        if guests is None:
+            guests = SqlGuestRepository(sessions)
+        if repository is None and generator is not None:
+            repository = SqlChatRepository(sessions)
+    assert guests is not None
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:

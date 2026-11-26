@@ -2,7 +2,7 @@
 title: "Persist chat turns"
 description: "Save full turns atomically and retain shared history after process restart."
 id: 6
-status: "Backlog"
+status: "In progress"
 labels: []
 weight: 2
 references: {}
