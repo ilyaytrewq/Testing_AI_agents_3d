@@ -109,3 +109,27 @@ def test_default_timeout_has_the_declared_float_type() -> None:
 
     model = ModelSettings(model="test", system_prompt="test prompt")
     assert type(model.timeout_seconds) is float
+
+
+def test_debug_logging_does_not_emit_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from themed_chat.settings import load_settings
+
+    config = tmp_path / "app.yaml"
+    config.write_text(CONFIG, encoding="utf-8")
+    env_file = tmp_path / ".env"
+    monkeypatch.setenv("APP_ACCESS_KEY", "debug_fixture_key")
+    monkeypatch.setenv("APP_SESSION_SECRET", "separate-synthetic-debug-signing-key-1")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    env_file.write_text("GEMINI_API_KEY=debug-fixture-provider-key\n", encoding="utf-8")
+    monkeypatch.setenv("PYDANTIC_SETTINGS_DEBUG", "1")
+    with caplog.at_level("DEBUG", logger="pydantic_settings"):
+        settings = load_settings(config, env_file=env_file)
+    assert settings.secrets.gemini_api_key.get_secret_value() == "debug-fixture-provider-key"
+    for value in (
+        "debug_fixture_key",
+        "separate-synthetic-debug-signing-key-1",
+        "debug-fixture-provider-key",
+    ):
+        assert value not in caplog.text

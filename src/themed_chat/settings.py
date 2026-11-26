@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from os import environ
 from pathlib import Path
 from re import compile as compile_pattern
 from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
+from dotenv import dotenv_values
 from pydantic import (
     AnyHttpUrl,
     BaseModel,
@@ -113,10 +115,10 @@ class AppSettings(BaseSettings):
         return env_settings, init_settings
 
 
-class SecretSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file_encoding="utf-8", extra="ignore", frozen=True, hide_input_in_errors=True
-    )
+SECRET_NAMES = ("APP_ACCESS_KEY", "APP_SESSION_SECRET", "GEMINI_API_KEY", "DATABASE_URL")
+
+
+class SecretSettings(ConfigSection):
     access_key: SecretStr = Field(validation_alias="APP_ACCESS_KEY")
     session_secret: SecretStr = Field(validation_alias="APP_SESSION_SECRET")
     gemini_api_key: SecretStr = Field(validation_alias="GEMINI_API_KEY")
@@ -174,11 +176,17 @@ def load_settings(
         ) from None
 
     try:
-        secrets = SecretSettings(_env_file=env_file)
+        # BaseSettings can log its raw sources in debug mode. Keep secrets out of it.
+        file_values = dotenv_values(env_file, interpolate=False) if env_file is not None else {}
+        secret_values = {
+            name: value
+            for name in SECRET_NAMES
+            if (value := environ.get(name, file_values.get(name))) is not None
+        }
+        secrets = SecretSettings.model_validate(secret_values)
     except ValidationError as error:
-        # Pydantic errors can retain raw inputs; report only whitelisted setting names.
-        names = {"APP_ACCESS_KEY", "APP_SESSION_SECRET", "GEMINI_API_KEY", "DATABASE_URL"}
-        invalid = ", ".join(sorted({str(e["loc"][0]) for e in error.errors() if e["loc"]} & names))
+        locations = {str(e["loc"][0]) for e in error.errors() if e["loc"]}
+        invalid = ", ".join(sorted(locations.intersection(SECRET_NAMES)))
         detail = invalid or "check keys and use distinct access and signing secrets"
         raise ConfigurationError(f"Invalid or missing secrets: {detail}.") from None
     except (OSError, ValueError, SettingsError):
