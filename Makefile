@@ -1,4 +1,4 @@
-.PHONY: check test
+.PHONY: check test e2e
 
 check:
 	uv lock --check
@@ -9,3 +9,6 @@ check:
 
 test:
 	uv run --locked pytest
+
+e2e:
+	uv run --locked --group browser pytest tests/e2e

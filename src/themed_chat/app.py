@@ -1,9 +1,11 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -93,6 +95,21 @@ def create_app(
     )
     app.include_router(session_routes(guests))
     app.include_router(chat_routes(get_service, configuration.app.chat.title))
+    web = Path(__file__).resolve().parent / "web"
+    app.mount("/static", StaticFiles(directory=web / "static"), name="static")
+
+    @app.get("/", include_in_schema=False)
+    async def index() -> FileResponse:
+        return FileResponse(
+            web / "index.html",
+            headers={
+                "Content-Security-Policy": (
+                    "default-src 'self'; base-uri 'none'; object-src 'none'; "
+                    "frame-ancestors 'none'; form-action 'none'"
+                ),
+                "X-Content-Type-Options": "nosniff",
+            },
+        )
 
     @app.get("/healthz")
     async def health() -> dict[str, str]:

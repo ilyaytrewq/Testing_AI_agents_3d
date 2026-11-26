@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Кофейный бариста</title>
+  <link rel="stylesheet" href="./static/style.css">
+  <script type="module" src="./static/app.js"></script>
+</head>
+<body>
+  <main class="shell">
+    <header class="masthead">
+      <div class="brand" aria-hidden="true">☕</div>
+      <div><p class="eyebrow">Тематический чат</p><h1 id="title">Кофейный бариста</h1></div>
+    </header>
+    <section class="card" id="start" aria-labelledby="start-title">
+      <h2 id="start-title">Загружаем чат</h2>
+      <p id="start-status" role="status">Проверяем сессию…</p>
+      <button id="retry" type="button" hidden>Повторить загрузку</button>
+    </section>
+    <section class="card" id="login" aria-labelledby="login-title" hidden>
+      <h2 id="login-title">Вход по ключу</h2>
+      <p>Чтобы открыть общий чат, введите ключ доступа.</p>
+      <form id="login-form" novalidate>
+        <label for="access-key">Ключ доступа</label>
+        <input id="access-key" type="password" autocomplete="off" spellcheck="false"
+               aria-describedby="key-help login-error" required>
+        <small id="key-help">8–255 символов: латинские буквы, цифры, дефис и подчёркивание.</small>
+        <p id="login-error" class="error" role="alert"></p>
+        <button id="login-button" type="submit" disabled>Войти</button>
+      </form>
+    </section>
+    <section class="card chat" id="chat" aria-labelledby="chat-title" hidden>
+      <h2 id="chat-title" class="visually-hidden">Чат</h2>
+      <p class="notice">Историю видят все участники с ключом. Не отправляйте личные данные.</p>
+      <div id="transcript" class="transcript" role="log" aria-label="История сообщений">
+        <div id="empty" class="empty">
+          <h3>С чего начнём?</h3>
+          <p>Спросите о помоле, пропорциях или способе заваривания.</p>
+        </div>
+        <ol id="messages"></ol>
+      </div>
+      <form id="message-form" novalidate>
+        <label for="message-input">Сообщение</label>
+        <textarea id="message-input" rows="3" required aria-describedby="message-count chat-error"
+                  placeholder="Например: какой помол выбрать для воронки?"></textarea>
+        <div class="composer-footer">
+          <span id="message-count">0 / 500</span>
+          <button id="send-button" type="submit" disabled>Отправить</button>
+        </div>
+        <p id="chat-status" class="status" role="status"></p>
+        <p id="chat-error" class="error" role="alert"></p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

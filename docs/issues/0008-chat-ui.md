@@ -2,7 +2,7 @@
 title: "Build the chat page"
 description: "Implement the accessible single-page UI and cover login, send, and reload in a browser."
 id: 8
-status: "Backlog"
+status: "In progress"
 labels: []
 weight: 2
 references: {}
