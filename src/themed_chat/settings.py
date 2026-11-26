@@ -5,6 +5,7 @@ from typing import Annotated, Literal, Self
 from urllib.parse import urlsplit
 
 from pydantic import (
+    AnyHttpUrl,
     BaseModel,
     ConfigDict,
     Field,
@@ -19,9 +20,8 @@ from pydantic_settings import (
     PydanticBaseSettingsSource,
     SettingsConfigDict,
     SettingsError,
-    YamlConfigSettingsSource,
 )
-from yaml import YAMLError
+from yaml import YAMLError, safe_load
 
 ACCESS_KEY_PATTERN = compile_pattern(r"[A-Za-z0-9_-]{8,255}")
 DEFAULT_CONFIG_FILE = Path("config/app.yaml")
@@ -44,7 +44,7 @@ class ModelSettings(ConfigSection):
     provider: Literal["gemini"] = "gemini"
     model: NonBlank
     system_prompt: NonBlank
-    timeout_seconds: Annotated[float, Field(gt=0, le=120)] = 25
+    timeout_seconds: Annotated[float, Field(gt=0, le=120)] = 25.0
     max_output_tokens: Annotated[int, Field(gt=0, le=8192)] = 1024
 
 
@@ -72,7 +72,6 @@ class AuthSettings(ConfigSection):
     @classmethod
     def validate_origin(cls, value: str) -> str:
         url = urlsplit(value)
-        port = url.port
         host = url.hostname
         if (
             not host
@@ -82,12 +81,10 @@ class AuthSettings(ConfigSection):
             or any(char.isspace() or char in "\\%" for char in host)
         ):
             raise ValueError("use a scheme and host with no path, credentials, or query")
-        if url.scheme == "http" and host not in {"127.0.0.1", "localhost", "::1"}:
+        canonical = AnyHttpUrl(value)
+        if canonical.scheme == "http" and canonical.host not in {"127.0.0.1", "localhost", "[::1]"}:
             raise ValueError("HTTPS is required outside loopback hosts")
-        display_host = f"[{host}]" if ":" in host else host
-        default_port = 443 if url.scheme == "https" else 80
-        suffix = f":{port}" if port is not None and port != default_port else ""
-        return f"{url.scheme}://{display_host}{suffix}"
+        return str(canonical).removesuffix("/")
 
 
 class AppSettings(BaseSettings):
@@ -165,7 +162,11 @@ def load_settings(
     try:
         if not config_file.is_file():
             raise ConfigurationError("Application YAML configuration file was not found.")
-        yaml_values = YamlConfigSettingsSource(AppSettings, yaml_file=config_file)()
+        yaml_values = safe_load(config_file.read_text(encoding="utf-8"))
+        if not isinstance(yaml_values, dict) or not all(
+            isinstance(key, str) and key in AppSettings.model_fields for key in yaml_values
+        ):
+            raise ValueError("expected a mapping of application sections")
         app = AppSettings(**yaml_values)
     except (OSError, ValueError, YAMLError, SettingsError):
         raise ConfigurationError(

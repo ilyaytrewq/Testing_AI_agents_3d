@@ -29,6 +29,7 @@ def test_process_environment_overrides_yaml_and_dotenv(
     env_file.write_text(DOTENV, encoding="utf-8")
     monkeypatch.setenv("APP_LLM__MODEL", "override-model")
     monkeypatch.setenv("APP_ACCESS_KEY", "override_key")
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     configuration = load_settings(yaml_file, env_file=env_file)
 
     assert configuration.app.llm.model == "override-model"
@@ -75,3 +76,36 @@ def test_non_loopback_origin_requires_https(
     monkeypatch.setenv("APP_AUTH__PUBLIC_ORIGIN", "http://chat.example.test")
     with pytest.raises(ConfigurationError, match="Invalid application configuration"):
         load_settings(config_file, env_file=None)
+
+
+@pytest.mark.parametrize(
+    "yaml_text",
+    [CONFIG + "\n_env_prefix: CUSTOM_\n", CONFIG + "\n123: unexpected\n", "- not a mapping\n"],
+)
+def test_yaml_rejects_invalid_top_level(yaml_text: str, tmp_path: Path) -> None:
+    from themed_chat.settings import ConfigurationError, load_settings
+
+    yaml_file = tmp_path / "app.yaml"
+    yaml_file.write_text(yaml_text, encoding="utf-8")
+    with pytest.raises(ConfigurationError, match="Invalid application configuration"):
+        load_settings(yaml_file, env_file=None)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("https://пример.рф", "https://xn--e1afmkfd.xn--p1ai"),
+        ("http://[0:0:0:0:0:0:0:1]:80", "http://[::1]"),
+    ],
+)
+def test_origin_is_serialized_like_a_browser(value: str, expected: str) -> None:
+    from themed_chat.settings import AuthSettings
+
+    assert AuthSettings(public_origin=value).public_origin == expected
+
+
+def test_default_timeout_has_the_declared_float_type() -> None:
+    from themed_chat.settings import ModelSettings
+
+    model = ModelSettings(model="test", system_prompt="test prompt")
+    assert type(model.timeout_seconds) is float
