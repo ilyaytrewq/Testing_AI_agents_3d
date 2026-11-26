@@ -32,7 +32,8 @@ class GeminiGenerator:
                 answer = response.text
         except (TimeoutError, TimeoutException):
             raise GenerationTimeout("The provider exceeded its deadline.") from None
-        except (errors.APIError, HTTPError, ValueError):
+        except (errors.APIError, HTTPError, ValueError, TypeError, AttributeError, KeyError):
+            # The SDK can fail while converting a malformed upstream payload.
             raise GenerationError("The provider could not generate a response.") from None
         if not answer:
             raise GenerationError("The provider returned no text.")

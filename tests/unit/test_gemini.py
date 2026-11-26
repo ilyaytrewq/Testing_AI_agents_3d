@@ -47,16 +47,23 @@ async def test_configured_model_and_system_prompt_reach_google_sdk() -> None:
 
 
 @pytest.mark.anyio
-async def test_provider_errors_do_not_expose_provider_details() -> None:
+@pytest.mark.parametrize(
+    ("status", "payload"),
+    [
+        (
+            429,
+            {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "private detail"}},
+        ),
+        (200, {"candidates": 123}),
+    ],
+)
+async def test_provider_errors_do_not_expose_provider_details(
+    status: int, payload: dict[str, object]
+) -> None:
     from themed_chat.adapters.gemini import GeminiGenerator
 
     def respond(_request: Request) -> Response:
-        return Response(
-            429,
-            json={
-                "error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": "private detail"}
-            },
-        )
+        return Response(status, json=payload)
 
     async with AsyncClient(transport=MockTransport(respond)) as http:
         with genai.Client(
