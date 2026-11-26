@@ -2,7 +2,7 @@
 title: "Persist guest identities"
 description: "Store users with async SQLAlchemy and migrate an empty file database."
 id: 4
-status: "Backlog"
+status: "In progress"
 labels: []
 weight: 2
 references: {}
