@@ -2,7 +2,7 @@
 title: "Verify the PostgreSQL profile"
 description: "Run the same repository contract on PostgreSQL before claiming support."
 id: 9
-status: "Backlog"
+status: "In progress"
 labels: []
 weight: 2
 references: {}
