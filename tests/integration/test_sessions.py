@@ -6,6 +6,7 @@ from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
 
 from themed_chat.app import create_app
+from themed_chat.chat.models import DraftTurn, Turn
 from themed_chat.settings import AppSettings, ModelSettings, SecretSettings, Settings
 
 ORIGIN = "http://127.0.0.1:8000"
@@ -19,6 +20,12 @@ class Guests:
 
     async def create(self, guest_id: UUID) -> None:
         self.created.append(guest_id)
+
+    async def list_turns(self) -> list[Turn]:
+        return []
+
+    async def append_turn(self, draft: DraftTurn) -> Turn:
+        raise AssertionError("Session tests do not write chat turns.")
 
 
 @pytest.fixture
@@ -36,7 +43,7 @@ async def client(guest_store: Guests) -> AsyncIterator[AsyncClient]:
             GEMINI_API_KEY=SecretStr("fixture-key"),
         ),
     )
-    app = create_app(settings, guests=guest_store)
+    app = create_app(settings, guests=guest_store, repository=guest_store)
     async with AsyncClient(transport=ASGITransport(app), base_url=ORIGIN) as client:
         yield client
 

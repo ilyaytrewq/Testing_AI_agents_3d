@@ -2,7 +2,7 @@
 title: "Connect the async Gemini adapter"
 description: "Pass the configured model and system prompt and handle provider failures without leaking details."
 id: 7
-status: "Backlog"
+status: "In progress"
 labels: []
 weight: 2
 references: {}

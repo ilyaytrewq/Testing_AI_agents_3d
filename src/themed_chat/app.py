@@ -1,13 +1,14 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
 from themed_chat.adapters.database import create_database_engine, migrate_database
+from themed_chat.adapters.gemini import connect_gemini
 from themed_chat.adapters.sql_repository import SqlChatRepository, SqlGuestRepository
 from themed_chat.api.auth_middleware import SESSION_COOKIE, AuthMiddleware
 from themed_chat.api.chat_routes import chat_routes
@@ -24,26 +25,40 @@ def create_app(
     repository: ChatRepository | None = None,
     generator: TextGenerator | None = None,
 ) -> FastAPI:
-    if repository is not None and generator is None:
-        raise ValueError("Provide a text generator for the custom chat repository.")
-    if generator is not None and (guests is None) != (repository is None):
+    if (guests is None) != (repository is None):
         raise ValueError("Provide custom guest and chat repositories together.")
     configuration = settings if settings is not None else load_settings()
     engine = create_database_engine(configuration) if guests is None else None
     if engine is not None:
         sessions = async_sessionmaker(engine)
-        if guests is None:
-            guests = SqlGuestRepository(sessions)
-        if repository is None and generator is not None:
-            repository = SqlChatRepository(sessions)
-    assert guests is not None
+        guests = SqlGuestRepository(sessions)
+        repository = SqlChatRepository(sessions)
+    assert guests is not None and repository is not None
+    store = repository
+    service = ChatService(store, generator) if generator is not None else None
+
+    def get_service() -> ChatService:
+        if service is None:
+            raise HTTPException(503, "service_not_ready")
+        return service
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+        nonlocal service
         try:
             if engine is not None:
                 await migrate_database(engine)
-            yield
+            if generator is not None:
+                yield
+            else:
+                async with connect_gemini(
+                    configuration.app.llm, configuration.secrets.gemini_api_key
+                ) as gemini:
+                    service = ChatService(store, gemini)
+                    try:
+                        yield
+                    finally:
+                        service = None
         finally:
             if engine is not None:
                 await engine.dispose()
@@ -77,10 +92,7 @@ def create_app(
         https_only=auth.cookie_secure,
     )
     app.include_router(session_routes(guests))
-    if repository is not None and generator is not None:
-        app.include_router(
-            chat_routes(ChatService(repository, generator), configuration.app.chat.title)
-        )
+    app.include_router(chat_routes(get_service, configuration.app.chat.title))
 
     @app.get("/healthz")
     async def health() -> dict[str, str]:

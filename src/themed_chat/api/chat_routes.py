@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
@@ -61,7 +62,7 @@ def _messages(turn: Turn, guest: UUID) -> list[MessageOutput]:
     ]
 
 
-def chat_routes(service: ChatService, title: str) -> APIRouter:
+def chat_routes(get_service: Callable[[], ChatService], title: str) -> APIRouter:
     router = APIRouter()
 
     @router.get("/api/messages")
@@ -70,7 +71,9 @@ def chat_routes(service: ChatService, title: str) -> APIRouter:
         return HistoryOutput(
             title=title,
             messages=[
-                message for turn in await service.history() for message in _messages(turn, guest)
+                message
+                for turn in await get_service().history()
+                for message in _messages(turn, guest)
             ],
         )
 
@@ -78,7 +81,7 @@ def chat_routes(service: ChatService, title: str) -> APIRouter:
     async def send_message(body: MessageInput, request: Request) -> TurnOutput:
         guest = _guest(request)
         try:
-            turn = await service.send(guest, body.text)
+            turn = await get_service().send(guest, body.text)
         except InvalidMessage:
             raise HTTPException(422, "invalid_message") from None
         except GenerationTimeout:
