@@ -8,14 +8,22 @@ from starlette.middleware.sessions import SessionMiddleware
 from themed_chat.adapters.database import create_database_engine, migrate_database
 from themed_chat.adapters.sql_repository import SqlGuestRepository
 from themed_chat.api.auth_middleware import SESSION_COOKIE, AuthMiddleware
+from themed_chat.api.chat_routes import chat_routes
 from themed_chat.api.session_routes import session_routes
-from themed_chat.chat.ports import GuestRepository
+from themed_chat.chat.ports import ChatRepository, GuestRepository, TextGenerator
+from themed_chat.chat.service import ChatService
 from themed_chat.settings import Settings, load_settings
 
 
 def create_app(
-    settings: Settings | None = None, *, guests: GuestRepository | None = None
+    settings: Settings | None = None,
+    *,
+    guests: GuestRepository | None = None,
+    repository: ChatRepository | None = None,
+    generator: TextGenerator | None = None,
 ) -> FastAPI:
+    if (repository is None) != (generator is None):
+        raise ValueError("Provide both a chat repository and a text generator.")
     configuration = settings if settings is not None else load_settings()
     engine = create_database_engine(configuration) if guests is None else None
     if guests is None:
@@ -56,6 +64,10 @@ def create_app(
         https_only=auth.cookie_secure,
     )
     app.include_router(session_routes(guests))
+    if repository is not None and generator is not None:
+        app.include_router(
+            chat_routes(ChatService(repository, generator), configuration.app.chat.title)
+        )
 
     @app.get("/healthz")
     async def health() -> dict[str, str]:
