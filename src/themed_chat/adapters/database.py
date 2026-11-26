@@ -24,11 +24,20 @@ def create_database_engine(settings: Settings) -> AsyncEngine:
         raise ConfigurationError("DATABASE_URL is required with the postgresql backend.")
     try:
         url = make_url(secret.get_secret_value())
-        if url.drivername != "postgresql+asyncpg" or not url.database:
-            raise ValueError("expected an async PostgreSQL URL with a database name")
+        if (
+            url.drivername != "postgresql+asyncpg"
+            or not url.database
+            or (url.port is not None and not 1 <= url.port <= 65535)
+            or url.query.keys() - {"ssl"}
+            or url.query.get("ssl", "prefer")
+            not in {"disable", "allow", "prefer", "require", "verify-ca", "verify-full"}
+        ):
+            raise ValueError("invalid PostgreSQL connection options")
         return create_async_engine(url, hide_parameters=True, pool_pre_ping=True)
     except (ArgumentError, ValueError):
-        raise ConfigurationError("DATABASE_URL must be a valid postgresql+asyncpg URL.") from None
+        raise ConfigurationError(
+            "DATABASE_URL must use postgresql+asyncpg and may only specify the ssl query option."
+        ) from None
 
 
 def _enable_foreign_keys(connection: DBAPIConnection, _record: object) -> None:

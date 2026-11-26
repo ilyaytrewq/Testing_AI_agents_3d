@@ -2,10 +2,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+from asyncpg import InterfaceError, InternalClientError, PostgresError
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -17,7 +19,7 @@ from themed_chat.api.chat_routes import chat_routes
 from themed_chat.api.session_routes import session_routes
 from themed_chat.chat.ports import ChatRepository, GuestRepository, TextGenerator
 from themed_chat.chat.service import ChatService
-from themed_chat.settings import Settings, load_settings
+from themed_chat.settings import ConfigurationError, Settings, load_settings
 
 
 def create_app(
@@ -49,7 +51,20 @@ def create_app(
         nonlocal service
         try:
             if engine is not None:
-                await migrate_database(engine)
+                try:
+                    await migrate_database(engine)
+                except (
+                    OSError,
+                    SQLAlchemyError,
+                    InterfaceError,
+                    InternalClientError,
+                    PostgresError,
+                ):
+                    backend = "PostgreSQL" if engine.dialect.name == "postgresql" else "SQLite"
+                    raise ConfigurationError(
+                        f"Could not initialize {backend}. "
+                        "Check connectivity and database permissions."
+                    ) from None
             if generator is not None:
                 yield
             else:
