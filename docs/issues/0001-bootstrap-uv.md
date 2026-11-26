@@ -2,7 +2,7 @@
 title: "Bootstrap uv and checks"
 description: "Clean installation, lockfile, lint, typing, and test commands."
 id: 1
-status: "In progress"
+status: "Done"
 labels: []
 weight: 2
 references: {}

@@ -2,7 +2,7 @@
 title: "Protect API with guest sessions"
 description: "Check the access key before guest creation; validate the signed session and mutation origin."
 id: 3
-status: "In progress"
+status: "Done"
 labels: []
 weight: 2
 references: {}

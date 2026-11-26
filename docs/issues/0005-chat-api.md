@@ -2,7 +2,7 @@
 title: "Implement the chat HTTP API"
 description: "Validate messages, attribute them to the session and run the use case with injected dependencies."
 id: 5
-status: "In progress"
+status: "Done"
 labels: []
 weight: 2
 references: {}

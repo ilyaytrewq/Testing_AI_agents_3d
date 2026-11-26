@@ -2,7 +2,7 @@
 title: "Load typed settings"
 description: "Validate YAML and dotenv settings with explicit source precedence and hidden secret values."
 id: 2
-status: "In progress"
+status: "Done"
 labels: []
 weight: 2
 references: {}
