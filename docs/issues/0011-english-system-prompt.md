@@ -2,7 +2,7 @@
 title: "Translate the default system prompt into English"
 description: "Use an English instruction without changing the UI or the assistant's reply language policy."
 id: 11
-status: "In progress"
+status: "Done"
 labels: []
 weight: 1
 references: {}
