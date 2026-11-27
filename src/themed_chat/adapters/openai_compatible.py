@@ -3,11 +3,18 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from httpx import AsyncClient
-from openai import APIError, APITimeoutError, AsyncOpenAI
+from openai import APIError, APITimeoutError, AsyncOpenAI, Omit
 from pydantic import SecretStr
 
 from themed_chat.chat.service import GenerationError, GenerationTimeout
 from themed_chat.settings import ConfigurationError, ModelSettings
+
+
+class _CompatibleClient(AsyncOpenAI):
+    @property
+    def default_headers(self) -> dict[str, str | Omit]:
+        # The SDK otherwise imports ambient OpenAI headers, including credentials.
+        return {"Accept": "application/json", "Content-Type": "application/json"}
 
 
 class OpenAICompatibleGenerator:
@@ -44,7 +51,7 @@ async def connect_openai_compatible(
         raise ConfigurationError("llm.base_url is required for openai_compatible.")
     async with (
         AsyncClient(follow_redirects=False, timeout=settings.timeout_seconds) as http,
-        AsyncOpenAI(
+        _CompatibleClient(
             api_key=key.get_secret_value(),
             base_url=settings.base_url,
             timeout=settings.timeout_seconds,

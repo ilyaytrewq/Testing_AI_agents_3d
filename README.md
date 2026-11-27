@@ -2,7 +2,7 @@
 title: "Кофейный бариста"
 description: "Тематический чат с настраиваемым LLM-провайдером, общим ключом доступа и постоянной историей."
 references:
-  "src/themed_chat/adapters/openai_compatible.py": "4fdce5a1e0f0d5afe87a87d23eb4e45ca4d6fe5c818782e23a809fe46a351910"
+  "src/themed_chat/adapters/openai_compatible.py": "0ff223bac1707ea7c4a14a104bd5589ef592a470d8a9f85e781cb9bd8c2e4af5"
   "src/themed_chat/settings.py": "95089aaeab21420a9de27d8968beffceba727ad7144899a1d82370b8fc781a03"
   ".dockerignore": "a90d30c8d1a25694dee6f5e1bd4e10f0a87b79a17bd8e6628b1e611197a2f2b0"
   "deploy/helm/themed-chat/Chart.yaml": "40212058339ec05ef383cef5c89b6f5cdcb036ebe1b799f5054a312a216e680f"

@@ -94,3 +94,26 @@ async def test_compatible_call_has_an_overall_deadline() -> None:
     ) as client:
         with pytest.raises(GenerationTimeout):
             await OpenAICompatibleGenerator(client, settings(0.02)).generate("test")
+
+
+@pytest.mark.anyio
+async def test_connection_does_not_forward_ambient_openai_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic import SecretStr
+
+    from themed_chat.adapters.openai_compatible import connect_openai_compatible
+
+    monkeypatch.setenv("OPENAI_CUSTOM_HEADERS", "authorization: Bearer ambient\nX-Private: private")
+    monkeypatch.setenv("OPENAI_ORG_ID", "ambient-org")
+    monkeypatch.setenv("OPENAI_PROJECT_ID", "ambient-project")
+
+    def reply(request: Request) -> Response:
+        assert request.headers.get_list("authorization") == ["Bearer selected"]
+        assert not {"x-private", "openai-organization", "openai-project"} & request.headers.keys()
+        return Response(200, json={"choices": [{"message": {"content": "OK"}}]})
+
+    http = AsyncClient(transport=MockTransport(reply))
+    monkeypatch.setattr("themed_chat.adapters.openai_compatible.AsyncClient", lambda **_: http)
+    async with connect_openai_compatible(settings(), SecretStr("selected")) as generator:
+        assert await generator.generate("test") == "OK"
