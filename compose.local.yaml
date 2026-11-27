@@ -1,10 +1,21 @@
 services:
   chat:
+    build: .
+    env_file: .env
     environment:
       APP_LOCAL_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env for local PostgreSQL}
+      APP_AUTH__PUBLIC_ORIGIN: ${APP_AUTH__PUBLIC_ORIGIN:-http://127.0.0.1:${CHAT_PORT:-8000}}
+    ports:
+      - "127.0.0.1:${CHAT_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/healthz', timeout=2).close()"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
   postgres:
     image: postgres:17-alpine
     environment:

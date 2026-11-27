@@ -173,7 +173,7 @@ def load_settings(
             if "DATABASE_URL" in secret_values:
                 raise ConfigurationError(
                     "DATABASE_URL cannot be combined with local PostgreSQL. "
-                    "Use only the base Compose file for an external database."
+                    "Use the external DSN outside the local Compose stack."
                 )
             if not local_password.strip():
                 raise ConfigurationError("POSTGRES_PASSWORD must not be blank.")

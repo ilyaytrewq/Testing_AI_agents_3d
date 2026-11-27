@@ -21,3 +21,4 @@ references: {}
 - [#11 Translate the default system prompt into English](0011-english-system-prompt.md)
 - [#12 Move database deployment out of application YAML](0012-compose-storage.md)
 - [#13 Use PostgreSQL as the only database](0013-postgresql-only.md)
+- [#14 Consolidate local Docker Compose](0014-local-compose.md)

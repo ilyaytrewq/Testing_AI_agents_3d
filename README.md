@@ -2,11 +2,10 @@
 title: "Кофейный бариста"
 description: "Тематический чат с Gemini, общим ключом доступа и постоянной историей."
 references:
-  ".env.example": "f361f16aceb858a95c1a738077a3ea2861cc1bc713b39e56dfed88e8f387d309"
+  ".env.example": "89cb1e9f14ffc1a5ab7393566b0d7d40487f57704986d403156a2a66e931e31c"
   "Dockerfile": "4edbe16d83a4310ee20c86615801bd0213ccc1886f444eb4790e67aefc82a114"
   "Makefile": "b933dae1091c89574efc9b985112e528b5ca0b772ac6c16ff40edd50be4c080c"
-  "compose.override.yaml": "9313bb58be6af52718056ecac9a0fdbe3d2a9b6ad44da2728efe9f18063dbc66"
-  "compose.yaml": "ffe0e864ca2ce79d920eab4e90b8aec50b459449859ae920887652d235ffce27"
+  "compose.local.yaml": "58246fa88804c44aff643e1c44e35303daa9ae6fee4145c7e4c8322689952339"
   "config/app.yaml": "5b859bfc63331410d12f42fbbab51d6f2c0bfb4a9f5586a324068001bef5d61d"
   "pyproject.toml": "91df518c61cf518b581ab739795a4c79c51d7a8d15b904f41667482f6a843a51"
   "src/themed_chat/adapters/database.py": "aa7087860a313178fca3d61abee2fe9eeffeb0a5b2a60a4bc6bd74bdb8f05d1a"
@@ -27,12 +26,12 @@ references:
 ```sh
 (umask 077; cp .env.example .env)
 ${EDITOR:-vi} .env
-docker compose up --build -d --wait
+docker compose -f compose.local.yaml up --build -d --wait
 ```
 
 Заполните `APP_ACCESS_KEY` (8–255 символов: `A–Z`, `a–z`, цифры, `-`, `_`), `APP_SESSION_SECRET` (не короче 32 символов), `GEMINI_API_KEY` и `POSTGRES_PASSWORD`. Для ключа доступа, секрета сессии и локального пароля PostgreSQL выполните `openssl rand -hex 32` три раза: значения должны быть независимыми. Используйте hex для пароля, чтобы избежать интерполяции спецсимволов в Compose. В браузер вводится **только `APP_ACCESS_KEY`**.
 
-Откройте **http://127.0.0.1:8000**. Не используйте `localhost` вместо `127.0.0.1`: API сверяет точный origin. Если порт занят, запустите, например, `CHAT_PORT=8080 docker compose up --build -d --wait` и откройте `http://127.0.0.1:8080`. При явно заданном `APP_AUTH__PUBLIC_ORIGIN` укажите тот же адрес и порт. `docker compose down` останавливает сервисы, не удаляя историю. Не добавляйте `-v`, если нужно сохранить данные.
+Откройте **http://127.0.0.1:8000**. Не используйте `localhost` вместо `127.0.0.1`: API сверяет точный origin. Если порт занят, запустите, например, `CHAT_PORT=8080 docker compose -f compose.local.yaml up --build -d --wait` и откройте `http://127.0.0.1:8080`. При явно заданном `APP_AUTH__PUBLIC_ORIGIN` укажите тот же адрес и порт. `docker compose -f compose.local.yaml down` останавливает сервисы, не удаляя историю. Не добавляйте `-v`, если нужно сохранить данные.
 
 ## Конфигурация
 
@@ -40,26 +39,13 @@ docker compose up --build -d --wait
 |---|---|
 | [config/app.yaml](config/app.yaml) | Заголовок, поставщик, модель, системный промпт, таймаут, лимит ответа и время жизни сессии. После изменения YAML пересоберите образ. |
 | [.env.example](.env.example) → локальный `.env` | Ключ доступа, секрет сессии, ключ Gemini и параметры PostgreSQL. Не коммитьте `.env`. Настройки приложения можно переопределить переменными вида `APP_СЕКЦИЯ__ПОЛЕ`, например `APP_LLM__MODEL`. |
-| [compose.yaml](compose.yaml) и [compose.override.yaml](compose.override.yaml) | Базовый файл запускает чат; автоматически подключаемый override добавляет локальный PostgreSQL и передаёт `POSTGRES_PASSWORD` приложению. При одновременной настройке локальной и внешней БД приложение выдаёт ошибку, не меняя хранилище молча. |
+| [compose.local.yaml](compose.local.yaml) | Запускает чат и PostgreSQL 17 для локальной разработки; порт БД не публикуется. |
 
 ### Хранилище
 
-При обычном `docker compose up` PostgreSQL 17 запускается вместе с чатом. Порт БД не публикуется на хосте; данные хранятся в именованном томе `postgres-data`. Не меняйте `POSTGRES_PASSWORD` для существующего тома без отдельной смены пароля в самой БД: образ PostgreSQL использует эту переменную при инициализации пустого тома.
+Локальная история хранится в именованном томе `postgres-data`. При обновлении со старого Compose сохраните прежнее имя проекта: смена имени приведёт к созданию другого тома. Не меняйте `POSTGRES_PASSWORD` для существующего тома без отдельной смены пароля в самой БД: образ использует переменную при инициализации пустого тома.
 
-**Облачная PostgreSQL.** В `.env` не нужен `POSTGRES_PASSWORD`; задайте `DATABASE_URL`, например:
-
-```dotenv
-DATABASE_URL=postgresql+asyncpg://user:password@db.example.com:5432/themed_chat?ssl=verify-full
-PGSSLROOTCERT=/etc/ssl/certs/ca-certificates.crt
-```
-
-Запустите только базовый Compose-файл, без локальной БД:
-
-```sh
-docker compose -f compose.yaml up --build -d --wait
-```
-
-`verify-full` проверяет сертификат и имя хоста. Для CA провайдера примонтируйте его в контейнер только для чтения и укажите путь в `PGSSLROOTCERT`. Спецсимволы в имени пользователя и пароле кодируйте для URL (например, `$` → `%24`). База должна существовать и принимать подключения от приложения; роль должна иметь право применять миграции Alembic. Автоматический запуск миграций рассчитан на один процесс приложения. Если переходите с уже запущенного локального стека, сначала остановите его командой `docker compose down` с прежним окружением, сохранив том.
+В других окружениях приложение подключается к существующей PostgreSQL через `DATABASE_URL`; локальный Compose не предназначен для облачного запуска.
 
 **Обновление с SQLite.** Прежде чем обновлять, остановите старый стек командой `docker compose down` без `-v`. Сделайте резервную копию файла `/data/chat.sqlite3` из прежнего именованного тома `<имя-проекта>_chat-data` (или `data/chat.sqlite3` при старом запуске без Docker). Не очищайте этот том: PostgreSQL начнёт с пустой истории, автоматического импорта нет. Для отката запустите старый коммит `a43bf10` с прежним `.env` и тем же именем Compose-проекта, чтобы он подключил прежний том.
 
