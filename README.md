@@ -2,13 +2,13 @@
 title: "Кофейный бариста"
 description: "Тематический чат с Gemini, общим ключом доступа и постоянной историей."
 references:
-  ".env.example": "0fa345f283aedea22f55c5e4cea52a487725e752a48139ebceac3e362dcf518d"
+  ".env.example": "0daabbc1fd9349353cbf2eaa813077378b1359683b71b679bc0ec9f9f7757611"
   "Dockerfile": "6f1855332a0b4a178ba9dac5d95a335b7d364e869894419342ba18faddc8e3a7"
   "Makefile": "b933dae1091c89574efc9b985112e528b5ca0b772ac6c16ff40edd50be4c080c"
   "compose.yaml": "260f31c296d932bf12aa8721eeb4bdb6dbc23b06cf15565fd5911eb21e172725"
-  "config/app.yaml": "46985754677e84fc3ca99fc39608b7885ac9ab6cfed4bd2dc947983bfc9e9843"
+  "config/app.yaml": "5b859bfc63331410d12f42fbbab51d6f2c0bfb4a9f5586a324068001bef5d61d"
   "pyproject.toml": "283a2bee8a0a14b500663e390e3bb7e140f97bfee58a167f7590fa783f6a2502"
-  "src/themed_chat/adapters/database.py": "76e7ee92fe2586db57181c0702d5d92578dfc0ac45a18851c659ac9ff1c5c897"
+  "src/themed_chat/adapters/database.py": "dc3dd39045672ae5fd43bdfcaf28b6c0a4cf582427ba6c07a0a094c73fe89759"
   "src/themed_chat/api/auth_middleware.py": "a4d8602f02fe940281ce692972dc00ebda04af2f34ba2404e3cdff7f9ecaabe4"
   "src/themed_chat/api/chat_routes.py": "9136a71f7e58d676bf4efb2912b096420d0f60403033b13088d754c5c818321d"
   "src/themed_chat/app.py": "20e7a67c08e81f323e1504982cae0ee29e9ed2f8b2b2830e99f18418870070b3"
@@ -33,22 +33,28 @@ docker compose up --build -d --wait
 
 Откройте **http://127.0.0.1:8000**. Не используйте `localhost` вместо `127.0.0.1`: API сверяет точный origin. Если порт занят, запустите, например, `CHAT_PORT=8080 docker compose up --build -d --wait` и откройте `http://127.0.0.1:8080`. При явно заданном `APP_AUTH__PUBLIC_ORIGIN` укажите тот же адрес и порт. `docker compose down` останавливает приложение, не удаляя историю; `down -v` удалит именованный том и данные.
 
-**Без Docker**, при наличии [uv](https://docs.astral.sh/uv/) и заполненного `.env`:
-
-```sh
-uv sync --locked
-uv run --locked uvicorn themed_chat.app:create_app --factory --host 127.0.0.1 --port 8000 --ws none
-```
-
 ## Конфигурация
 
 | Где | Что задаётся |
 |---|---|
-| [config/app.yaml](config/app.yaml) | Заголовок, поставщик, модель, системный промпт, таймаут, лимит ответа, тип хранилища и время жизни сессии. После изменения нужен перезапуск; в Compose YAML входит в образ — пересоберите его. |
-| [.env.example](.env.example) → локальный `.env` | Три обязательных секрета из инструкции, плюс `DATABASE_URL` для PostgreSQL. Не включайте значения в Git или Dockerfile. При запуске без Docker экспортированные переменные имеют приоритет над `.env`. При запуске через Compose секреты берутся из `.env`: одноимённые переменные, экспортированные на хосте, сами по себе не передаются в контейнер. |
-| Окружение процесса | Незасекреченные настройки можно переопределить именами вида `APP_СЕКЦИЯ__ПОЛЕ`, например `APP_LLM__MODEL` или `APP_AUTH__PUBLIC_ORIGIN`. В локальном запуске `uvicorn` обычные ключи из `.env` не читаются: экспортируйте их или меняйте YAML. Compose передаёт `.env` в окружение контейнера. |
+| [config/app.yaml](config/app.yaml) | Заголовок, поставщик, модель, системный промпт, таймаут, лимит ответа и время жизни сессии. После изменения YAML пересоберите образ. |
+| [.env.example](.env.example) → локальный `.env` | Три обязательных секрета из инструкции и, при необходимости, `DATABASE_URL` для PostgreSQL. Compose передаёт параметры из `.env` в контейнер; одноимённые секреты, экспортированные на хосте, сами по себе не передаются. Не коммитьте `.env`. |
+| [compose.yaml](compose.yaml) | Путь к SQLite и постоянный том. Настройки приложения можно переопределять через переменные вида `APP_СЕКЦИЯ__ПОЛЕ`; например, `APP_LLM__MODEL`. |
 
-SQLite — по умолчанию: файл `data/chat.sqlite3` вне Docker, каталог `/data` на постоянном томе в Compose. Для PostgreSQL укажите `db.backend: postgresql` или `APP_DB__BACKEND=postgresql` в окружении, затем задайте секретный `DATABASE_URL=postgresql+asyncpg://user:password@host:5432/database`. База должна существовать и быть доступна приложению; контейнеру нельзя указывать `127.0.0.1` для БД на хосте. Спецсимволы в имени пользователя и пароле кодируйте как компоненты URL (например, `$` → `%24`), чтобы Compose не интерполировал их. Допустимый URL-параметр — `ssl`, например `?ssl=verify-full`. Alembic применяет схему при запуске; смена БД не переносит историю. Автоматический запуск миграций рассчитан на один процесс приложения.
+### Хранилище
+
+**Без `DATABASE_URL`** Compose использует SQLite: `/data/chat.sqlite3` на именованном томе `chat-data`. Приложение не создаёт файл БД на хосте по умолчанию.
+
+**Если PostgreSQL уже есть в облаке**, добавьте в `.env` адрес и данные подключения, например:
+
+```dotenv
+DATABASE_URL=postgresql+asyncpg://user:password@db.example.com:5432/themed_chat?ssl=verify-full
+PGSSLROOTCERT=/etc/ssl/certs/ca-certificates.crt
+```
+
+`verify-full` проверяет цепочку сертификатов и имя хоста. Если провайдер выдаёт собственный CA, примонтируйте его в контейнер только для чтения и укажите путь внутри контейнера в `PGSSLROOTCERT`. Спецсимволы в имени пользователя и пароле кодируйте для URL (например, `$` → `%24`). База должна существовать и принимать подключения от приложения; роль должна иметь права для миграций Alembic. Запуск — той же командой `docker compose up --build -d --wait`. Данные хранятся в облачной БД, не в Docker-томе. Чтобы облачный деплой не мог запуститься на SQLite при забытом DSN, добавьте `APP_DB__BACKEND=postgresql` в `.env`.
+
+Переключение БД **не переносит историю**: существующие записи и том остаются на месте. Автоматический запуск миграций рассчитан на один процесс приложения.
 
 Если модель недоступна для вашего ключа, замените `llm.model` на доступную в [каталоге Gemini](https://aistudio.google.com/docs/models). Сервис не подставляет фальшивый ответ при ошибке провайдера.
 

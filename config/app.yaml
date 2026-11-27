@@ -10,9 +10,6 @@ llm:
     If the request is unrelated to coffee, briefly explain what you can help with and steer the conversation back to coffee.
   timeout_seconds: 25
   max_output_tokens: 1024
-db:
-  backend: sqlite
-  sqlite_path: data/chat.sqlite3
 auth:
   public_origin: http://127.0.0.1:8000
   session_ttl_seconds: 28800

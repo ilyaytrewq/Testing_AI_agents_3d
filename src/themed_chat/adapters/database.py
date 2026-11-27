@@ -14,12 +14,18 @@ from themed_chat.settings import ConfigurationError, Settings
 
 def create_database_engine(settings: Settings) -> AsyncEngine:
     db = settings.app.db
-    if db.backend == "sqlite":
+    secret = settings.secrets.database_url
+    if db.backend == "sqlite" and secret is not None:
+        raise ConfigurationError("DATABASE_URL cannot be used with an explicit SQLite backend.")
+    if db.backend != "postgresql" and secret is None:
+        if db.sqlite_path is None:
+            raise ConfigurationError(
+                "Set APP_DB__SQLITE_PATH for SQLite, or start the app with Docker Compose."
+            )
         url = URL.create("sqlite+aiosqlite", database=str(db.sqlite_path.absolute()))
         engine = create_async_engine(url, hide_parameters=True)
         event.listen(engine.sync_engine, "connect", _enable_foreign_keys)
         return engine
-    secret = settings.secrets.database_url
     if secret is None:
         raise ConfigurationError("DATABASE_URL is required with the postgresql backend.")
     try:

@@ -47,7 +47,7 @@ async def storage(
             await conn.exec_driver_sql(f'CREATE DATABASE "{database}"')
         try:
             url = admin_url.set(database=database).render_as_string(hide_password=False)
-            yield DatabaseSettings(backend="postgresql"), SecretStr(url)
+            yield DatabaseSettings(), SecretStr(url)
         finally:
             async with admin.connect() as conn:
                 await conn.exec_driver_sql(f'DROP DATABASE "{database}"')

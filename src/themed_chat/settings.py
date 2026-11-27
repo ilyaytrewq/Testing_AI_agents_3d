@@ -45,8 +45,8 @@ class ModelSettings(ConfigSection):
 
 
 class DatabaseSettings(ConfigSection):
-    backend: Literal["sqlite", "postgresql"] = "sqlite"
-    sqlite_path: Path = Path("data/chat.sqlite3")
+    backend: Literal["sqlite", "postgresql"] | None = None
+    sqlite_path: Path | None = None
 
     @field_validator("sqlite_path", mode="before")
     @classmethod

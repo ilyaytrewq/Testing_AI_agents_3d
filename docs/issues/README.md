@@ -19,3 +19,4 @@ references: {}
 - [#9 Verify the PostgreSQL profile](0009-postgres-contract.md)
 - [#10 Package and verify the project](0010-compose-delivery.md)
 - [#11 Translate the default system prompt into English](0011-english-system-prompt.md)
+- [#12 Move database deployment out of application YAML](0012-compose-storage.md)
