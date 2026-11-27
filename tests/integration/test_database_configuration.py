@@ -22,6 +22,8 @@ def deployment_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name, value in {
         "APP_ACCESS_KEY": "compose_fixture_key",
         "APP_SESSION_SECRET": "test-database-signing-secret-not-production",
+        "APP_LLM__BASE_URL": "https://llm.test/v1",
+        "APP_LLM__MODEL": "fixture",
         "LLM_API_KEY": "unused-fixture",
     }.items():
         monkeypatch.setenv(name, value)

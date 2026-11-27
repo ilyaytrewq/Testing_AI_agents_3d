@@ -5,7 +5,7 @@ image:
 imagePullSecrets: []
 existingSecret: ""
 llm:
-  # Set both overrides or leave both empty to use the defaults from app.yaml.
+  # Required: the model ID and base URL of your OpenAI-compatible API.
   model: ""
   baseUrl: ""
 publicOrigin: http://127.0.0.1:8000

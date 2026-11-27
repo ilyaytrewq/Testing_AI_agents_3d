@@ -32,7 +32,10 @@ jobs:
         with:
           version: "0.13.3"
       - name: Lint Helm chart
-        run: helm lint deploy/helm/themed-chat --strict --set image.repository=example.test/chat,existingSecret=chart-test
+        run: >-
+          helm lint deploy/helm/themed-chat --strict
+          --set-string image.repository=example.test/chat,existingSecret=chart-test
+          --set-string llm.baseUrl=https://llm.example.test/v1,llm.model=chart-test
       - run: uv sync --locked
       - run: make check
         env:

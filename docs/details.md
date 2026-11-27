@@ -2,11 +2,11 @@
 title: "Подробности"
 description: "Локальный запуск, конфигурация, авторизация, защита темы и тесты."
 references:
-  "../.env.example": "6b147008ad5c0f6c848bbef3463d282316a00aee2c1daedec5f57b150a6fc615"
-  "../Makefile": "40c77c868a57ea9aa2851dd3cd24ac689f278a78576bd72779eacf26e9137183"
+  "../.env.example": "d1dfb0e443a1464c72c2467ea4aff4b65d6523a088d230bbfd95ef7cd770a370"
+  "../Makefile": "ad659bbce15396eb9e638d28d26cb6f2eff1c178bd7e6c4afc596a6704456118"
   "../pyproject.toml": "7053f66fa79b336619a0e594779c42f565188c0dfee9c6798131ae355dc5dda5"
-  "../config/app.yaml": "184a1506e77d2b1c612d12658743e8b60fcc9a50f8776d9d322573cfee964442"
-  "../src/themed_chat/settings.py": "4ab6357432a57be5b381b4104ef0d1e883c0242431b86fde05565cf40190b02c"
+  "../config/app.yaml": "4fee52b0f656b9aa762585cf8a3135c34cfc70b3c8a74f06e983760173ae6270"
+  "../src/themed_chat/settings.py": "9742088da0f79bc44b5d2d34a605a314b282701d2759fad3c88561bccdb7f1e3"
   "../src/themed_chat/adapters/providers.py": "6b6a0e4b0ba2f89f32b1f33cc7dc775e6f95427e1ff68d6373a14872e82ef2b4"
   "../src/themed_chat/api/auth_middleware.py": "e9c648c1940d96f0dc44932c88e974acb1d322abea7a8b242100052286ec5ac6"
   "../src/themed_chat/api/chat_routes.py": "c85109da0790dce26dfd0a19bc786e8389ef63083b5d45913d28ffe1581dae65"
@@ -30,7 +30,7 @@ references:
 
 ## Запуск без Docker
 
-Нужны [uv](https://docs.astral.sh/uv/) и PostgreSQL с уже созданными базой и ролью. После `make env` добавьте в `.env` строки `LLM_API_KEY=...` и `DATABASE_URL=postgresql+asyncpg://user:password@127.0.0.1:5432/themed_chat?ssl=disable`, затем:
+Нужны [uv](https://docs.astral.sh/uv/) и PostgreSQL с уже созданными базой и ролью. После `make env` заполните в `.env` поля модели и добавьте строку `DATABASE_URL=postgresql+asyncpg://user:password@127.0.0.1:5432/themed_chat?ssl=disable`. Затем запустите приложение.
 
 ```sh
 uv sync --locked
@@ -42,8 +42,8 @@ uv run --locked uvicorn themed_chat.app:create_app --factory --port 8000
 ## Конфигурация
 
 - [config/app.yaml](../config/app.yaml) — настройки по умолчанию. Путь к файлу можно сменить через `APP_CONFIG_FILE`. В Compose каталог `config/` подключён к контейнеру только для чтения: после правки промпта или темы достаточно `docker compose -f compose.local.yaml restart chat`, пересборка не нужна.
-- Любое значение YAML переопределяется переменной `APP_<СЕКЦИЯ>__<ПОЛЕ>`, например `APP_LLM__MODEL` или `APP_AUTH__LOGIN_ATTEMPTS`.
-- [.env.example](../.env.example) — шаблон секретов. В Compose `DATABASE_URL` собирается в [compose.local.yaml](../compose.local.yaml) из `POSTGRES_PASSWORD`, поэтому пароль должен быть URL-безопасным (hex из `make env` подходит). Порт БД наружу не публикуется, история лежит на томе `postgres-data`.
+- Переменные `APP_<СЕКЦИЯ>__<ПОЛЕ>` из `.env` переопределяют значения YAML. Переменные процесса имеют приоритет над `.env`.
+- [.env.example](../.env.example) — шаблон для `.env`. В Compose `DATABASE_URL` собирается в [compose.local.yaml](../compose.local.yaml) из `POSTGRES_PASSWORD`, поэтому пароль должен быть URL-безопасным (hex из `make env` подходит). Порт БД наружу не публикуется, история лежит на томе `postgres-data`.
 - Порт на хосте: `CHAT_PORT=8080 docker compose -f compose.local.yaml up --build -d --wait`.
 
 | Ключ | По умолчанию | Назначение |
@@ -51,7 +51,7 @@ uv run --locked uvicorn themed_chat.app:create_app --factory --port 8000
 | `chat.title` | Кофейный бариста | Заголовок страницы |
 | `chat.message_limit`, `chat.message_window_seconds` | 10, 60 | Лимит сообщений на гостя |
 | `llm.provider` | `openai_compatible` | Провайдер из [adapters/providers.py](../src/themed_chat/adapters/providers.py) |
-| `llm.base_url`, `llm.model` | Gemini (OpenAI-совместимый API) | Адрес API и ID модели |
+| `llm.base_url`, `llm.model` | Обязательные поля | Базовый URL API и ID модели |
 | `llm.system_prompt` | см. YAML | Тема и правила ответа |
 | `llm.timeout_seconds` | 25 | Таймаут основной модели (до 120) |
 | `llm.max_output_tokens` | 4096 | Лимит ответа (до 8192) |
@@ -74,12 +74,12 @@ uv run --locked uvicorn themed_chat.app:create_app --factory --port 8000
 
 Провайдер выбирается в `llm.provider` (по умолчанию `openai_compatible`, другого пока нет); неизвестное имя — ошибка конфигурации при старте. Новый провайдер — это один модуль в `src/themed_chat/adapters/` с функцией подключения, которая отдаёт объект с методами `generate` и `complete` (порт `ModelClient`), и одна строка в словаре `PROVIDERS` в [adapters/providers.py](../src/themed_chat/adapters/providers.py).
 
-По умолчанию используется Google Gemini через его OpenAI-совместимый API. Подойдёт любой сервис с таким API: укажите базовый URL и ID модели, а в `LLM_API_KEY` — ключ этого сервиса. В Compose это три переменные в `.env`:
+Заполните три поля в `.env` данными вашего OpenAI-совместимого API. В `LLM_API_KEY` укажите ключ этого же сервиса.
 
 ```dotenv
-APP_LLM__BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
-APP_LLM__MODEL=gemini-3.8-flash
-LLM_API_KEY=ключ-сервиса
+APP_LLM__BASE_URL=
+APP_LLM__MODEL=
+LLM_API_KEY=
 ```
 
 Не дописывайте `/chat/completions`: клиент добавляет путь сам. API должен принимать Bearer-ключ и сообщения с ролями `system` и `user`, а в ответе возвращать строку в `choices[0].message.content`. Ключ отправляется на настроенный адрес, поэтому меняйте его вместе с URL. `llm.base_url` должен быть HTTPS; обычный HTTP допустим только для loopback (`127.0.0.1`, `localhost`, `[::1]`). Прокси из переменных окружения (`HTTPS_PROXY` и др.) клиент не использует, редиректы не выполняет. Сервер на хосте Docker Desktop недоступен из контейнера по loopback, поэтому для него нужен HTTPS-адрес, доступный из контейнера (например, `https://host.docker.internal:…`). После правки `.env` выполните `docker compose -f compose.local.yaml up -d --wait`.
@@ -169,4 +169,4 @@ docker stop themed-chat-test-db
 APP_LLM__BASE_URL=... APP_LLM__MODEL=... LLM_API_KEY=... uv run pytest tests/llm_eval -m llm_eval -s
 ```
 
-Без явно заданных `APP_LLM__BASE_URL` и `APP_LLM__MODEL` набор не запускается, чтобы ключ не ушёл провайдеру из YAML по умолчанию. Конфигурацию он читает так же, как приложение (YAML и `APP_*`), и печатает хост и модель, к которым обращается.
+Набор требует, чтобы `APP_LLM__BASE_URL`, `APP_LLM__MODEL` и `LLM_API_KEY` были явно заданы в окружении процесса. При запуске он печатает хост и модель, к которым обращается.

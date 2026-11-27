@@ -214,7 +214,7 @@ async def test_service_is_unavailable_until_the_model_client_is_ready() -> None:
 @pytest.mark.parametrize(
     ("base_url", "model"),
     [
-        ("https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-3.8-flash"),
+        ("https://llm.example.test/custom/openai/", "other-model"),
         ("https://llm.example.test/v1", "any-model"),
     ],
 )

@@ -28,16 +28,33 @@ def test_process_environment_overrides_yaml_and_dotenv(
     yaml_file = tmp_path / "app.yaml"
     yaml_file.write_text(CONFIG, encoding="utf-8")
     env_file = tmp_path / ".env"
-    env_file.write_text(DOTENV, encoding="utf-8")
+    env_file.write_text(
+        DOTENV + "APP_LLM__BASE_URL=https://dotenv.test/v1\nAPP_LLM__MODEL=dotenv-model\n",
+        encoding="utf-8",
+    )
     monkeypatch.setenv("APP_LLM__MODEL", "override-model")
     monkeypatch.setenv("APP_ACCESS_KEY", "override_key")
+    monkeypatch.delenv("APP_LLM__BASE_URL", raising=False)
     monkeypatch.delenv("LLM_API_KEY", raising=False)
     configuration = load_settings(yaml_file, env_file=env_file)
 
     assert configuration.app.llm.model == "override-model"
+    assert configuration.app.llm.base_url == "https://dotenv.test/v1"
     assert configuration.app.llm.system_prompt == "First line.\nSecond line."
     assert configuration.secrets.access_key.get_secret_value() == "override_key"
     assert configuration.secrets.llm_api_key.get_secret_value() == "sample-provider-key"
+
+
+@pytest.mark.parametrize("env_file", [None, Path(".env.example")])
+def test_default_config_requires_the_operator_to_set_model_and_endpoint(
+    env_file: Path | None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from themed_chat.settings import ConfigurationError, load_settings
+
+    monkeypatch.delenv("APP_LLM__BASE_URL", raising=False)
+    monkeypatch.delenv("APP_LLM__MODEL", raising=False)
+    with pytest.raises(ConfigurationError, match="APP_LLM__BASE_URL and APP_LLM__MODEL"):
+        load_settings(Path("config/app.yaml"), env_file=env_file)
 
 
 def test_invalid_secret_is_not_in_configuration_error(

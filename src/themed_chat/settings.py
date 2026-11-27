@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from ipaddress import IPv4Network, IPv6Network, ip_network
 from json import dumps, loads
@@ -262,7 +263,9 @@ APP_SECTIONS: dict[str, type[ConfigSection]] = {
 }
 
 
-def _apply_environment_overrides(raw: object) -> dict[str, object]:
+def _apply_environment_overrides(
+    raw: object, overrides: Mapping[str, str | None]
+) -> dict[str, object]:
     if not isinstance(raw, dict) or any(
         not isinstance(name, str) or name not in APP_SECTIONS for name in raw
     ):
@@ -272,13 +275,14 @@ def _apply_environment_overrides(raw: object) -> dict[str, object]:
         previous = values.get(section, {})
         if not isinstance(previous, dict):
             raise ValueError("expected each application section to be a mapping")
-        overrides: dict[str, str] = {}
+        section_overrides: dict[str, str] = {}
         for field_name in schema.model_fields:
             env_name = f"APP_{section.upper()}__{field_name.upper()}"
-            if env_name in environ:
-                overrides[field_name] = environ[env_name]
-        if overrides:
-            values[section] = {**previous, **overrides}
+            value = overrides.get(env_name)
+            if value is not None:
+                section_overrides[field_name] = value
+        if section_overrides:
+            values[section] = {**previous, **section_overrides}
     return values
 
 
@@ -367,15 +371,26 @@ class Settings:
         return self.secrets.llm_api_key
 
 
-def load_app_settings(config_file: Path | None = None) -> AppSettings:
-    """Read the YAML file and apply APP_<SECTION>__<FIELD> overrides; no secrets."""
+def load_app_settings(
+    config_file: Path | None = None, *, file_values: Mapping[str, str | None] | None = None
+) -> AppSettings:
+    """Load YAML with APP_<SECTION>__<FIELD> overrides from .env and the process."""
     if config_file is None:
         config_file = Path(environ.get(CONFIG_FILE_ENV) or DEFAULT_CONFIG_FILE)
     try:
         if not config_file.is_file():
             raise ConfigurationError("Application YAML configuration file was not found.")
         yaml_values: object = safe_load(config_file.read_text(encoding="utf-8"))
-        return AppSettings.model_validate(_apply_environment_overrides(yaml_values))
+        overrides = {**(file_values or {}), **environ}
+        return AppSettings.model_validate(_apply_environment_overrides(yaml_values, overrides))
+    except ValidationError as error:
+        if any(e["loc"] in {("llm", "base_url"), ("llm", "model")} for e in error.errors()):
+            raise ConfigurationError(
+                "Invalid or missing model settings. Set APP_LLM__BASE_URL and APP_LLM__MODEL."
+            ) from None
+        raise ConfigurationError(
+            "Invalid application configuration. Check the YAML file and APP_ overrides."
+        ) from None
     except (OSError, ValueError, YAMLError):
         raise ConfigurationError(
             "Invalid application configuration. Check the YAML file and APP_ overrides."
@@ -411,11 +426,14 @@ def _secret_values(file_values: dict[str, str | None]) -> dict[str, str]:
 def load_settings(
     config_file: Path | None = None, *, env_file: Path | None = Path(".env")
 ) -> Settings:
-    app = load_app_settings(config_file)
-
     try:
         # BaseSettings can log its raw sources in debug mode. Keep secrets out of it.
         file_values = dotenv_values(env_file, interpolate=False) if env_file is not None else {}
+    except (OSError, ValueError):
+        raise ConfigurationError("Could not read the local .env file.") from None
+
+    app = load_app_settings(config_file, file_values=file_values)
+    try:
         secret_values = _secret_values(file_values)
         secrets = SecretSettings.model_validate(secret_values)
     except ValidationError as error:

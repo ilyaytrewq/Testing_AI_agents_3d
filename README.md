@@ -1,15 +1,3 @@
----
-title: "Кофейный бариста"
-description: "Быстрый запуск, устройство и API тематического чата."
-references:
-  ".env.example": "6b147008ad5c0f6c848bbef3463d282316a00aee2c1daedec5f57b150a6fc615"
-  "Makefile": "40c77c868a57ea9aa2851dd3cd24ac689f278a78576bd72779eacf26e9137183"
-  "compose.local.yaml": "8e731cc3818607bedfdc17cacb34d00b7aef8b82cde2be347fc7b60b6e94980a"
-  "config/app.yaml": "184a1506e77d2b1c612d12658743e8b60fcc9a50f8776d9d322573cfee964442"
-  "src/themed_chat/api/chat_routes.py": "c85109da0790dce26dfd0a19bc786e8389ef63083b5d45913d28ffe1581dae65"
-  "src/themed_chat/api/session_routes.py": "072067107ac6624e886d28dd1264081f064244f5197c17f365aac11af406fe40"
-  "src/themed_chat/chat/guard.py": "c295ef06e9fbaa4e1db67c219f72eacad205a71be2cbfca82bdaca6e21cac134"
----
 
 # Кофейный бариста
 
@@ -17,11 +5,11 @@ references:
 
 ## Быстрый запуск
 
-Нужны Docker Compose v2 и ключ API модели ([Google AI Studio](https://aistudio.google.com/app/apikey) для модели по умолчанию).
+Нужны Docker Compose v2, базовый URL OpenAI-совместимого API, ID модели и ключ этого API.
 
 ```sh
 make env                                 # создаёт .env со случайными секретами
-${EDITOR:-vi} .env                       # впишите LLM_API_KEY
+${EDITOR:-vi} .env                        # заполните APP_LLM__BASE_URL, APP_LLM__MODEL и LLM_API_KEY
 docker compose -f compose.local.yaml up --build -d --wait
 grep APP_ACCESS_KEY .env                 # ключ для входа в браузере
 ```

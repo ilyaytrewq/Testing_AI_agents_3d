@@ -3,8 +3,7 @@ chat:
 llm:
   # A provider name from src/themed_chat/adapters/providers.py.
   provider: openai_compatible
-  base_url: https://generativelanguage.googleapis.com/v1beta/openai/
-  model: gemini-3.8-flash
+  # Set APP_LLM__BASE_URL and APP_LLM__MODEL for your provider.
   system_prompt: |-
     You are a home coffee brewing assistant. Reply in the user's language.
     Give concise, practical advice on grind size, coffee-to-water ratio, water temperature, brew time, and technique.

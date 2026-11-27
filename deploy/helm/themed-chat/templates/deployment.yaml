@@ -3,8 +3,8 @@
 {{- $tag := required "image.tag is required" .Values.image.tag -}}
 {{- $model := .Values.llm.model -}}
 {{- $baseURL := .Values.llm.baseUrl -}}
-{{- if ne (empty $model) (empty $baseURL) -}}
-{{- fail "llm.model and llm.baseUrl must be set together" -}}
+{{- if or (empty $model) (empty $baseURL) -}}
+{{- fail "llm.model and llm.baseUrl are required" -}}
 {{- end -}}
 {{- $secretKeys := list "APP_ACCESS_KEY" "APP_SESSION_SECRET" "DATABASE_URL" "LLM_API_KEY" -}}
 {{- if .Values.classifier.apiKeyInSecret -}}
@@ -56,12 +56,10 @@ spec:
           env:
             - name: APP_AUTH__PUBLIC_ORIGIN
               value: {{ required "publicOrigin is required" .Values.publicOrigin | quote }}
-            {{- if $model }}
             - name: APP_LLM__MODEL
               value: {{ $model | quote }}
             - name: APP_LLM__BASE_URL
               value: {{ $baseURL | quote }}
-            {{- end }}
             {{- with .Values.classifier.baseUrl }}
             - name: APP_GUARD__CLASSIFIER_BASE_URL
               value: {{ . | quote }}

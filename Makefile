@@ -7,7 +7,7 @@ env:
 		-e "s|^APP_SESSION_SECRET=.*|APP_SESSION_SECRET=$$(openssl rand -hex 32)|" \
 		-e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=$$(openssl rand -hex 32)|" \
 		.env.example > .env
-	@echo "Создан .env (права 0600). Впишите в него LLM_API_KEY."
+	@echo "Создан .env (права 0600). Заполните APP_LLM__BASE_URL, APP_LLM__MODEL и LLM_API_KEY."
 	@echo "Ключ для входа в браузере: grep APP_ACCESS_KEY .env"
 
 check:

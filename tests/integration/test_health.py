@@ -10,6 +10,11 @@ from support import MemoryStorage, StubGenerator, client_for, make_settings
 from themed_chat.app import create_app
 
 
+def set_model_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("APP_LLM__BASE_URL", "https://llm.test/v1")
+    monkeypatch.setenv("APP_LLM__MODEL", "fixture")
+
+
 @pytest.fixture
 def deployment_env(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, postgres_dsn: SecretStr
@@ -18,6 +23,7 @@ def deployment_env(
     monkeypatch.chdir(tmp_path)
     Path("config").mkdir()
     Path("config/app.yaml").write_bytes(config_bytes)
+    set_model_environment(monkeypatch)
     monkeypatch.setenv("DATABASE_URL", postgres_dsn.get_secret_value())
     monkeypatch.setenv("APP_ACCESS_KEY", "test-key")
     monkeypatch.setenv("APP_SESSION_SECRET", "unit-test-signing-secret-at-least-32-chars")
@@ -68,6 +74,7 @@ def test_factory_rejects_missing_secrets(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.chdir(tmp_path)
     Path("config").mkdir()
     Path("config/app.yaml").write_text(config, encoding="utf-8")
+    set_model_environment(monkeypatch)
     for name in ("APP_ACCESS_KEY", "APP_SESSION_SECRET", "LLM_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     with pytest.raises(ConfigurationError, match="APP_ACCESS_KEY"):

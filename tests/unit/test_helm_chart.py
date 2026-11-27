@@ -6,6 +6,8 @@ import pytest
 import yaml
 
 CHART = Path(__file__).resolve().parents[2] / "deploy/helm/themed-chat"
+RUNTIME_VALUES = "image.repository=example.test/chat,existingSecret=chat-runtime"
+MODEL_VALUES = "llm.baseUrl=https://llm.example.test/v1,llm.model=any-model"
 
 
 @pytest.fixture
@@ -23,8 +25,8 @@ def test_helm_runs_one_non_root_replica_with_external_secrets(helm: str) -> None
             "template",
             "coffee",
             str(CHART),
-            "--set",
-            "image.repository=example.test/chat,existingSecret=chat-runtime",
+            "--set-string",
+            f"{RUNTIME_VALUES},{MODEL_VALUES}",
         ],
         capture_output=True,
         text=True,
@@ -58,9 +60,7 @@ def test_helm_runs_one_non_root_replica_with_external_secrets(helm: str) -> None
     assert {item["key"] for item in volume["secret"]["items"]} == expected_secrets
     assert pod["securityContext"]["fsGroup"] == 10001
     assert "APP_AUTH__TRUSTED_PROXIES" not in env and "APP_GUARD__CLASSIFIER_BASE_URL" not in env
-    assert {item["name"] for item in container["env"]}.isdisjoint(
-        {"APP_LLM__PROVIDER", "APP_LLM__MODEL", "APP_LLM__BASE_URL"}
-    )
+    assert "APP_LLM__PROVIDER" not in env
     assert container["startupProbe"]["httpGet"]["path"] == "/readyz"
     assert container["readinessProbe"]["httpGet"]["path"] == "/readyz"
     assert container["livenessProbe"]["httpGet"]["path"] == "/healthz"
@@ -88,8 +88,8 @@ def test_helm_rejects_release_names_unsupported_by_the_service(release: str, hel
             "template",
             release,
             str(CHART),
-            "--set",
-            "image.repository=example.test/chat,existingSecret=chat-runtime",
+            "--set-string",
+            f"{RUNTIME_VALUES},{MODEL_VALUES}",
         ],
         capture_output=True,
         text=True,
@@ -107,7 +107,7 @@ def test_helm_llm_overrides_set_model_and_endpoint(helm: str) -> None:
             "coffee",
             str(CHART),
             "--set-string",
-            "image.repository=example.test/chat,existingSecret=chat-runtime",
+            RUNTIME_VALUES,
             "--set-string",
             "llm.baseUrl=https://llm.example.test/v1",
             "--set-string",
@@ -129,8 +129,10 @@ def test_helm_llm_overrides_set_model_and_endpoint(helm: str) -> None:
     assert env["LLM_API_KEY_FILE"]["value"] == "/run/secrets/themed-chat/LLM_API_KEY"
 
 
-@pytest.mark.parametrize("override", ["llm.model=qwen-plus", "llm.baseUrl=https://llm.test/v1"])
-def test_helm_rejects_one_sided_llm_overrides(helm: str, override: str) -> None:
+@pytest.mark.parametrize(
+    "override", ["", ",llm.model=any-model", ",llm.baseUrl=https://llm.test/v1"]
+)
+def test_helm_requires_both_model_and_endpoint(helm: str, override: str) -> None:
     result = subprocess.run(
         [
             helm,
@@ -138,14 +140,14 @@ def test_helm_rejects_one_sided_llm_overrides(helm: str, override: str) -> None:
             "coffee",
             str(CHART),
             "--set-string",
-            f"image.repository=example.test/chat,existingSecret=chat-runtime,{override}",
+            f"{RUNTIME_VALUES}{override}",
         ],
         capture_output=True,
         text=True,
         check=False,
     )
     assert result.returncode != 0
-    assert "llm.model and llm.baseUrl must be set together" in result.stderr
+    assert "llm.model and llm.baseUrl are required" in result.stderr
 
 
 def test_helm_trusted_proxies_and_classifier_options(helm: str) -> None:
@@ -156,7 +158,7 @@ def test_helm_trusted_proxies_and_classifier_options(helm: str) -> None:
             "coffee",
             str(CHART),
             "--set-string",
-            "image.repository=example.test/chat,existingSecret=chat-runtime",
+            f"{RUNTIME_VALUES},{MODEL_VALUES}",
             "--set",
             "trustedProxies={10.0.0.0/8,fd00::/8}",
             "--set-string",

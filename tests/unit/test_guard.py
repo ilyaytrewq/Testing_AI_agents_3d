@@ -25,9 +25,9 @@ from themed_chat.chat.models import TruncatedText
 from themed_chat.chat.service import ChatService, GenerationError, GenerationTimeout
 from themed_chat.settings import AppSettings, GuardSettings, ModelSettings, Settings
 
-CONFIG = AppSettings.model_validate(
-    yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
-)
+config_values = yaml.safe_load(Path("config/app.yaml").read_text(encoding="utf-8"))
+config_values["llm"].update(base_url="https://llm.test/v1", model="fixture")
+CONFIG = AppSettings.model_validate(config_values)
 OFF = "Только о кофе."
 REFUSALS = {"ru": OFF, "en": "Coffee only.", "de": "Nur Kaffee."}
 COFFEE_ANSWER = "Для воронки возьмите 15 г кофе на 250 мл воды при 93 °C."

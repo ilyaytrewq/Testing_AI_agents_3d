@@ -4,8 +4,8 @@ description: "Установка приложения с Helm и настрой�
 references:
   "../Dockerfile": "c597e20b082a2ad032d1574d653955fa8c4f9876ea17cbb6f6984e04ff2bf390"
   "../deploy/helm/themed-chat/Chart.yaml": "40212058339ec05ef383cef5c89b6f5cdcb036ebe1b799f5054a312a216e680f"
-  "../deploy/helm/themed-chat/values.yaml": "3b5d6e68e795c3155e24d10c18fa0ca6b2562ba900d616086e98673f2b71b4e6"
-  "../deploy/helm/themed-chat/templates/deployment.yaml": "024415d349fb0cd76b1c217e16056ec996f214c00a2bd0cbc04e83c54e1ab015"
+  "../deploy/helm/themed-chat/values.yaml": "63ac599811a004d47e17536b1cb76138f4043174ef1a0ce972257e48a9fe4f0a"
+  "../deploy/helm/themed-chat/templates/deployment.yaml": "451ed54e3433f0aea264a3658a7f0a1926bf7c6227db1dff7e93f06f9cbd18f4"
   "../deploy/helm/themed-chat/templates/service.yaml": "c02ea24783b035be44fb5dd702b9572bad26fadb5839dd7f36d7a3c56b863c62"
 ---
 
@@ -32,7 +32,7 @@ LLM_API_KEY=<ключ-модели>
 
 `APP_ACCESS_KEY` и `APP_SESSION_SECRET` должны отличаться. Смена `APP_ACCESS_KEY` завершает все действующие сессии: после перезапуска пользователям нужно войти заново.
 
-URL API модели и её ID задаются вместе в `llm.baseUrl` и `llm.model` в [values.yaml](../deploy/helm/themed-chat/values.yaml) либо через `--set-string`. Если оба поля пусты, используются настройки из [config/app.yaml](../config/app.yaml). Подойдёт любой OpenAI-совместимый API, а `LLM_API_KEY` должен быть ключом именно этого сервиса.
+Укажите базовый URL и ID модели в обязательных полях `llm.baseUrl` и `llm.model` в [values.yaml](../deploy/helm/themed-chat/values.yaml) либо через `--set-string`. Используйте `LLM_API_KEY` от выбранного OpenAI-совместимого API.
 
 ## Установка
 
@@ -42,7 +42,9 @@ kubectl -n themed-chat create secret generic themed-chat-runtime --from-env-file
 helm upgrade --install coffee ./deploy/helm/themed-chat \
   --namespace themed-chat --wait --timeout 5m \
   --set-string image.repository=YOUR_REGISTRY/themed-chat \
-  --set-string image.tag=0.1.0 --set-string existingSecret=themed-chat-runtime
+  --set-string image.tag=0.1.0 --set-string existingSecret=themed-chat-runtime \
+  --set-string "llm.baseUrl=${LLM_BASE_URL:?Укажите базовый URL API}" \
+  --set-string "llm.model=${LLM_MODEL:?Укажите ID модели}"
 kubectl -n themed-chat port-forward svc/coffee-themed-chat 8000:8000
 ```
 
