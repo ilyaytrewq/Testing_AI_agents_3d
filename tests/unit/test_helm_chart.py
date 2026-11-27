@@ -61,3 +61,22 @@ def test_helm_requires_existing_secret(helm: str) -> None:
     )
     assert result.returncode != 0
     assert "existingSecret is required" in result.stderr
+
+
+@pytest.mark.parametrize("release", ["coffee.prod", "2coffee"])
+def test_helm_rejects_release_names_unsupported_by_the_service(release: str, helm: str) -> None:
+    result = subprocess.run(
+        [
+            helm,
+            "template",
+            release,
+            str(CHART),
+            "--set",
+            "image.repository=example.test/chat,existingSecret=chat-runtime",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode != 0
+    assert "release name must start with a letter" in result.stderr

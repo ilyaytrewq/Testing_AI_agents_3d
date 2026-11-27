@@ -2,6 +2,8 @@
 title: "Развёртывание в Kubernetes"
 description: "Установка Helm-чарта сервиса с отдельной PostgreSQL и готовым Kubernetes Secret."
 references:
+  "../src/themed_chat/adapters/database.py": "8e91f00852ce622d6740899cdfef376e65bfa6136c10acc95b3033f93ff2a3cf"
+  "../deploy/helm/themed-chat/templates/_helpers.tpl": "e47a8adb077e305c76a0a737bef092b8a799e4a7d72b9784e57dc537e74ba216"
   "../Dockerfile": "4edbe16d83a4310ee20c86615801bd0213ccc1886f444eb4790e67aefc82a114"
   "../deploy/helm/themed-chat/Chart.yaml": "40212058339ec05ef383cef5c89b6f5cdcb036ebe1b799f5054a312a216e680f"
   "../deploy/helm/themed-chat/values.yaml": "8319d2568cddda49b60c87cf5257efd4e8e96195d95547d2e82f56578ac1e59a"
@@ -15,11 +17,11 @@ references:
 
 ## Установка
 
-В namespace `themed-chat` заранее создайте Secret `themed-chat-runtime` с четырьмя ключами: `APP_ACCESS_KEY`, `APP_SESSION_SECRET`, `GEMINI_API_KEY`, `DATABASE_URL`. Можно подготовить отдельный файл `runtime.env` с этими ключами в формате `KEY=value` с правами `0600`; не кладите его в репозиторий, values или образ. Не используйте локальный Compose `.env` в качестве этого файла. Сгенерируйте независимые ключ доступа и секрет сессии, как описано в [README](../README.md).
+В namespace `themed-chat` заранее создайте Secret `themed-chat-runtime` с четырьмя ключами: `APP_ACCESS_KEY`, `APP_SESSION_SECRET`, `GEMINI_API_KEY`, `DATABASE_URL`. Можно подготовить отдельный файл `$HOME/.config/themed-chat/runtime.env` вне рабочей копии с этими ключами в формате `KEY=value` и правами `0600`; не кладите его в репозиторий, values или образ. Не используйте локальный Compose `.env` в качестве этого файла. Сгенерируйте независимые ключ доступа и секрет сессии, как описано в [README](../README.md).
 
 ```sh
 kubectl create namespace themed-chat
-kubectl -n themed-chat create secret generic themed-chat-runtime --from-env-file=runtime.env
+kubectl -n themed-chat create secret generic themed-chat-runtime --from-env-file="$HOME/.config/themed-chat/runtime.env"
 helm upgrade --install coffee ./deploy/helm/themed-chat \
   --namespace themed-chat --wait --timeout 5m \
   --set-string image.repository=YOUR_REGISTRY/themed-chat \
@@ -27,10 +29,10 @@ helm upgrade --install coffee ./deploy/helm/themed-chat \
 kubectl -n themed-chat port-forward svc/coffee-themed-chat 8000:8000
 ```
 
-Откройте `http://127.0.0.1:8000`. При доступе через внешний шлюз настройте маршрутизацию на этот Service и задайте `publicOrigin` равным точному HTTPS-адресу без пути и завершающего `/`, например `https://chat.example.com`. Для `port-forward` на другом порту поменяйте и `publicOrigin`, и адрес в браузере.
+Имя Helm-релиза должно начинаться со строчной латинской буквы; дальше допустимы строчные латинские буквы, цифры и дефисы. Откройте `http://127.0.0.1:8000`. При доступе через внешний шлюз настройте маршрутизацию на этот Service и задайте `publicOrigin` равным точному HTTPS-адресу без пути и завершающего `/`, например `https://chat.example.com`. Для `port-forward` на другом порту поменяйте и `publicOrigin`, и адрес в браузере.
 
 ## Подключение к PostgreSQL
 
 Формат `DATABASE_URL`: `postgresql+asyncpg://user:password@db.example.com:5432/themed_chat?ssl=verify-full`. Целевая база должна существовать, приниматься с сети Pod и позволять роли применить миграции Alembic. Кодируйте спецсимволы в имени и пароле для URL. По умолчанию `PGSSLROOTCERT` указывает на системный набор сертификатов образа. Если БД использует частный CA, создайте в том же namespace Secret с ключом `ca.crt` и укажите его имя в `postgresCASecret`; чарт примонтирует сертификат только для чтения.
 
-Миграции выполняются при старте, поэтому чарт использует одну реплику и стратегию `Recreate`: при обновлении возможен короткий простой. Не запускайте несколько релизов приложения на одной БД во время миграций. При изменении значений в существующем Secret перезапустите Pod, например `kubectl -n themed-chat rollout restart deployment/coffee-themed-chat`. Удаление Helm-релиза не удаляет Secret и внешнюю БД.
+Миграции выполняются при старте под транзакционной advisory-блокировкой PostgreSQL: если два Pod стартуют одновременно, второй ждёт завершения первого. Чарт использует одну реплику и стратегию `Recreate`; при обновлении возможен короткий простой. При изменении значений в существующем Secret перезапустите Pod, например `kubectl -n themed-chat rollout restart deployment/coffee-themed-chat`. Удаление Helm-релиза не удаляет Secret и внешнюю БД.

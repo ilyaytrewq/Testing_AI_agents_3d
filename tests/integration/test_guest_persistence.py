@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
@@ -75,5 +77,35 @@ async def test_interrupted_migration_rolls_back_before_retry(postgres_dsn: Secre
         async with engine.connect() as connection:
             version = await connection.scalar(text("SELECT version_num FROM alembic_version"))
         assert version == "0002_chat_turns"
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_concurrent_startups_serialize_migrations(postgres_dsn: SecretStr) -> None:
+    engine = create_async_engine(postgres_dsn.get_secret_value())
+    at_first_ddl = asyncio.Event()
+    resume_first = asyncio.Event()
+
+    def overlap(connection: object, _cursor: object, statement: str, *_rest: object) -> None:
+        if statement.lstrip().startswith("CREATE TABLE alembic_version"):
+            if at_first_ddl.is_set():
+                resume_first.set()
+            else:
+                at_first_ddl.set()
+                connection.connection.dbapi_connection.run_async(lambda _: resume_first.wait())
+        elif at_first_ddl.is_set() and "pg_advisory_xact_lock" in statement:
+            resume_first.set()
+
+    event.listen(engine.sync_engine, "before_cursor_execute", overlap)
+    try:
+        async with asyncio.timeout(10), asyncio.TaskGroup() as tasks:
+            tasks.create_task(migrate_database(engine))
+            await at_first_ddl.wait()
+            tasks.create_task(migrate_database(engine))
+        async with engine.connect() as connection:
+            assert await connection.scalar(text("SELECT version_num FROM alembic_version")) == (
+                "0002_chat_turns"
+            )
     finally:
         await engine.dispose()

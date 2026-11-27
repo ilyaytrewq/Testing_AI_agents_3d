@@ -8,7 +8,7 @@ references:
   "compose.local.yaml": "58246fa88804c44aff643e1c44e35303daa9ae6fee4145c7e4c8322689952339"
   "config/app.yaml": "5b859bfc63331410d12f42fbbab51d6f2c0bfb4a9f5586a324068001bef5d61d"
   "pyproject.toml": "91df518c61cf518b581ab739795a4c79c51d7a8d15b904f41667482f6a843a51"
-  "src/themed_chat/adapters/database.py": "aa7087860a313178fca3d61abee2fe9eeffeb0a5b2a60a4bc6bd74bdb8f05d1a"
+  "src/themed_chat/adapters/database.py": "8e91f00852ce622d6740899cdfef376e65bfa6136c10acc95b3033f93ff2a3cf"
   "src/themed_chat/api/auth_middleware.py": "a4d8602f02fe940281ce692972dc00ebda04af2f34ba2404e3cdff7f9ecaabe4"
   "src/themed_chat/api/chat_routes.py": "9136a71f7e58d676bf4efb2912b096420d0f60403033b13088d754c5c818321d"
   "src/themed_chat/app.py": "a18889943c62cebd02ec522cdce98ed7a18d774fe85628e4f63f3edffc8caef8"

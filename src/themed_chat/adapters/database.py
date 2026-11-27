@@ -2,7 +2,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from sqlalchemy import Connection
+from sqlalchemy import Connection, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
@@ -38,6 +38,17 @@ def _upgrade(connection: Connection) -> None:
     command.upgrade(config, "head")
 
 
+# Stable across app versions and database sessions; PostgreSQL scopes it to one database.
+MIGRATION_LOCK_ID = int.from_bytes(b"THEMEDCH", "big")
+
+
 async def migrate_database(engine: AsyncEngine) -> None:
-    async with engine.begin() as connection:
-        await connection.run_sync(_upgrade)
+    async with engine.connect() as connection:
+        # Read the current revision after a concurrent migrator commits, even if the
+        # database's default isolation level would retain the pre-lock snapshot.
+        await connection.execution_options(isolation_level="READ COMMITTED")
+        async with connection.begin():
+            await connection.execute(
+                text("SELECT pg_advisory_xact_lock(:lock_id)"), {"lock_id": MIGRATION_LOCK_ID}
+            )
+            await connection.run_sync(_upgrade)
