@@ -7,7 +7,7 @@ import yaml
 from markdown_it import MarkdownIt
 
 ROOT = Path(__file__).resolve().parents[2]
-PAGES = [ROOT / "README.md", *sorted((ROOT / "docs").rglob("*.md"))]
+PAGES = [ROOT / "README.md", *sorted((ROOT / ".github" / "issues").glob("*.md"))]
 
 
 @pytest.mark.parametrize("page", PAGES, ids=[str(path.relative_to(ROOT)) for path in PAGES])

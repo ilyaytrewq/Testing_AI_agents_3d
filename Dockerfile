@@ -5,7 +5,7 @@ COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy PYTHONDONTWRITEBYTECODE=1 \
     PATH=/app/.venv/bin:$PATH
 WORKDIR /app
-COPY pyproject.toml uv.lock .python-version ./
+COPY pyproject.toml uv.lock ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY src ./src
 COPY config ./config

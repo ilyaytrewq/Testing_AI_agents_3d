@@ -6,8 +6,6 @@ references: {}
 
 # Local issues
 
-[Implementation plan](../implementation-plan.md)
-
 - [#1 Bootstrap uv and checks](0001-bootstrap-uv.md)
 - [#2 Load typed settings](0002-typed-settings.md)
 - [#3 Protect API with guest sessions](0003-session-middleware.md)
@@ -23,3 +21,4 @@ references: {}
 - [#13 Use PostgreSQL as the only database](0013-postgresql-only.md)
 - [#14 Consolidate local Docker Compose](0014-local-compose.md)
 - [#15 Deploy the chat with Helm](0015-helm-chart.md)
+- [#16 Consolidate project documentation](0016-consolidate-readme.md)

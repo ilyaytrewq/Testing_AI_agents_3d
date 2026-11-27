@@ -2,7 +2,6 @@
 !Dockerfile
 !pyproject.toml
 !uv.lock
-!.python-version
 !src/
 !src/**
 !config/
