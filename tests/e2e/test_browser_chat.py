@@ -1,7 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator
 from os import environ
-from pathlib import Path
 from socket import AF_INET, SOCK_STREAM, socket
 
 import pytest
@@ -14,7 +13,6 @@ from themed_chat.chat.service import GenerationError
 from themed_chat.settings import (
     AppSettings,
     AuthSettings,
-    DatabaseSettings,
     ModelSettings,
     SecretSettings,
     Settings,
@@ -34,7 +32,7 @@ class BrowserGenerator:
 
 
 @pytest.fixture
-async def web_url(tmp_path: Path) -> AsyncIterator[str]:
+async def web_url(postgres_dsn: SecretStr) -> AsyncIterator[str]:
     with socket(AF_INET, SOCK_STREAM) as listener:
         listener.bind(("127.0.0.1", 0))
         address, port = listener.getsockname()[:2]
@@ -42,13 +40,13 @@ async def web_url(tmp_path: Path) -> AsyncIterator[str]:
         settings = Settings(
             AppSettings(
                 auth=AuthSettings(public_origin=base_url),
-                db=DatabaseSettings(sqlite_path=tmp_path / "browser.sqlite3"),
                 llm=ModelSettings(model="fixture", system_prompt="fixture"),
             ),
             SecretSettings(
                 APP_ACCESS_KEY=SecretStr(ACCESS_KEY),
                 APP_SESSION_SECRET=SecretStr("long-test-secret-only-for-browser-testing"),
                 GEMINI_API_KEY=SecretStr("unused-fixture-value"),
+                DATABASE_URL=postgres_dsn,
             ),
         )
         app = create_app(settings, generator=BrowserGenerator())

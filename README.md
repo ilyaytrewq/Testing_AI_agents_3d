@@ -2,16 +2,17 @@
 title: "Кофейный бариста"
 description: "Тематический чат с Gemini, общим ключом доступа и постоянной историей."
 references:
-  ".env.example": "0daabbc1fd9349353cbf2eaa813077378b1359683b71b679bc0ec9f9f7757611"
-  "Dockerfile": "6f1855332a0b4a178ba9dac5d95a335b7d364e869894419342ba18faddc8e3a7"
+  ".env.example": "f361f16aceb858a95c1a738077a3ea2861cc1bc713b39e56dfed88e8f387d309"
+  "Dockerfile": "4edbe16d83a4310ee20c86615801bd0213ccc1886f444eb4790e67aefc82a114"
   "Makefile": "b933dae1091c89574efc9b985112e528b5ca0b772ac6c16ff40edd50be4c080c"
-  "compose.yaml": "260f31c296d932bf12aa8721eeb4bdb6dbc23b06cf15565fd5911eb21e172725"
+  "compose.override.yaml": "914bb24325085f49a3171fb4879ab4399858dcf4e0cd15898fce17ea73d6290f"
+  "compose.yaml": "ffe0e864ca2ce79d920eab4e90b8aec50b459449859ae920887652d235ffce27"
   "config/app.yaml": "5b859bfc63331410d12f42fbbab51d6f2c0bfb4a9f5586a324068001bef5d61d"
-  "pyproject.toml": "283a2bee8a0a14b500663e390e3bb7e140f97bfee58a167f7590fa783f6a2502"
-  "src/themed_chat/adapters/database.py": "dc3dd39045672ae5fd43bdfcaf28b6c0a4cf582427ba6c07a0a094c73fe89759"
+  "pyproject.toml": "91df518c61cf518b581ab739795a4c79c51d7a8d15b904f41667482f6a843a51"
+  "src/themed_chat/adapters/database.py": "aa7087860a313178fca3d61abee2fe9eeffeb0a5b2a60a4bc6bd74bdb8f05d1a"
   "src/themed_chat/api/auth_middleware.py": "a4d8602f02fe940281ce692972dc00ebda04af2f34ba2404e3cdff7f9ecaabe4"
   "src/themed_chat/api/chat_routes.py": "9136a71f7e58d676bf4efb2912b096420d0f60403033b13088d754c5c818321d"
-  "src/themed_chat/app.py": "20e7a67c08e81f323e1504982cae0ee29e9ed2f8b2b2830e99f18418870070b3"
+  "src/themed_chat/app.py": "a18889943c62cebd02ec522cdce98ed7a18d774fe85628e4f63f3edffc8caef8"
   "tests/unit/test_docs.py": "192024e6e0c94f5161ff97244faf3fabb1d18fe481909a6bfe26e05a7506bc63"
 ---
 
@@ -29,32 +30,38 @@ ${EDITOR:-vi} .env
 docker compose up --build -d --wait
 ```
 
-Заполните `APP_ACCESS_KEY` (8–255 символов: `A–Z`, `a–z`, цифры, `-`, `_`), `APP_SESSION_SECRET` (случайный, не короче 32 символов и не равен ключу доступа) и `GEMINI_API_KEY`. Например, сгенерируйте два независимых значения командой `openssl rand -hex 32`, выполняя её отдельно для каждого секрета. В браузер вводится **только `APP_ACCESS_KEY`**.
+Заполните `APP_ACCESS_KEY` (8–255 символов: `A–Z`, `a–z`, цифры, `-`, `_`), `APP_SESSION_SECRET` (не короче 32 символов), `GEMINI_API_KEY` и `POSTGRES_PASSWORD`. Для ключа доступа, секрета сессии и локального пароля PostgreSQL выполните `openssl rand -hex 32` три раза: значения должны быть независимыми, а пароль БД сразу подставляется в URL и должен быть в hex. В браузер вводится **только `APP_ACCESS_KEY`**.
 
-Откройте **http://127.0.0.1:8000**. Не используйте `localhost` вместо `127.0.0.1`: API сверяет точный origin. Если порт занят, запустите, например, `CHAT_PORT=8080 docker compose up --build -d --wait` и откройте `http://127.0.0.1:8080`. При явно заданном `APP_AUTH__PUBLIC_ORIGIN` укажите тот же адрес и порт. `docker compose down` останавливает приложение, не удаляя историю; `down -v` удалит именованный том и данные.
+Откройте **http://127.0.0.1:8000**. Не используйте `localhost` вместо `127.0.0.1`: API сверяет точный origin. Если порт занят, запустите, например, `CHAT_PORT=8080 docker compose up --build -d --wait` и откройте `http://127.0.0.1:8080`. При явно заданном `APP_AUTH__PUBLIC_ORIGIN` укажите тот же адрес и порт. `docker compose down` останавливает сервисы, не удаляя историю. Не добавляйте `-v`, если нужно сохранить данные.
 
 ## Конфигурация
 
 | Где | Что задаётся |
 |---|---|
 | [config/app.yaml](config/app.yaml) | Заголовок, поставщик, модель, системный промпт, таймаут, лимит ответа и время жизни сессии. После изменения YAML пересоберите образ. |
-| [.env.example](.env.example) → локальный `.env` | Три обязательных секрета из инструкции и, при необходимости, `DATABASE_URL` для PostgreSQL. Compose передаёт параметры из `.env` в контейнер; одноимённые секреты, экспортированные на хосте, сами по себе не передаются. Не коммитьте `.env`. |
-| [compose.yaml](compose.yaml) | Путь к SQLite и постоянный том. Настройки приложения можно переопределять через переменные вида `APP_СЕКЦИЯ__ПОЛЕ`; например, `APP_LLM__MODEL`. |
+| [.env.example](.env.example) → локальный `.env` | Ключ доступа, секрет сессии, ключ Gemini и параметры PostgreSQL. Не коммитьте `.env`. Настройки приложения можно переопределить переменными вида `APP_СЕКЦИЯ__ПОЛЕ`, например `APP_LLM__MODEL`. |
+| [compose.yaml](compose.yaml) и [compose.override.yaml](compose.override.yaml) | Базовый файл запускает чат; автоматически подключаемый override добавляет локальный PostgreSQL и формирует `DATABASE_URL` из `POSTGRES_PASSWORD`. |
 
 ### Хранилище
 
-**Без `DATABASE_URL`** Compose использует SQLite: `/data/chat.sqlite3` на именованном томе `chat-data`. Приложение не создаёт файл БД на хосте по умолчанию.
+При обычном `docker compose up` PostgreSQL 17 запускается вместе с чатом. Порт БД не публикуется на хосте; данные хранятся в именованном томе `postgres-data`. Не меняйте `POSTGRES_PASSWORD` для существующего тома без отдельной смены пароля в самой БД: образ PostgreSQL использует эту переменную при инициализации пустого тома.
 
-**Если PostgreSQL уже есть в облаке**, добавьте в `.env` адрес и данные подключения, например:
+**Облачная PostgreSQL.** В `.env` не нужен `POSTGRES_PASSWORD`; задайте `DATABASE_URL`, например:
 
 ```dotenv
 DATABASE_URL=postgresql+asyncpg://user:password@db.example.com:5432/themed_chat?ssl=verify-full
 PGSSLROOTCERT=/etc/ssl/certs/ca-certificates.crt
 ```
 
-`verify-full` проверяет цепочку сертификатов и имя хоста. Если провайдер выдаёт собственный CA, примонтируйте его в контейнер только для чтения и укажите путь внутри контейнера в `PGSSLROOTCERT`. Спецсимволы в имени пользователя и пароле кодируйте для URL (например, `$` → `%24`). База должна существовать и принимать подключения от приложения; роль должна иметь права для миграций Alembic. Запуск — той же командой `docker compose up --build -d --wait`. Данные хранятся в облачной БД, не в Docker-томе. Чтобы облачный деплой не мог запуститься на SQLite при забытом DSN, добавьте `APP_DB__BACKEND=postgresql` в `.env`.
+Запустите только базовый Compose-файл, без локальной БД:
 
-Переключение БД **не переносит историю**: существующие записи и том остаются на месте. Автоматический запуск миграций рассчитан на один процесс приложения.
+```sh
+docker compose -f compose.yaml up --build -d --wait
+```
+
+`verify-full` проверяет сертификат и имя хоста. Для CA провайдера примонтируйте его в контейнер только для чтения и укажите путь в `PGSSLROOTCERT`. Спецсимволы в имени пользователя и пароле кодируйте для URL (например, `$` → `%24`). База должна существовать и принимать подключения от приложения; роль должна иметь право применять миграции Alembic. Автоматический запуск миграций рассчитан на один процесс приложения. Если переходите с уже запущенного локального стека, сначала остановите его командой `docker compose down` с прежним окружением, сохранив том.
+
+Старая история из SQLite не переносится автоматически: существующие файлы и том не удаляются.
 
 Если модель недоступна для вашего ключа, замените `llm.model` на доступную в [каталоге Gemini](https://aistudio.google.com/docs/models). Сервис не подставляет фальшивый ответ при ошибке провайдера.
 
@@ -76,13 +83,19 @@ PGSSLROOTCERT=/etc/ssl/certs/ca-certificates.crt
 
 ## Проверки
 
+Для интеграционных тестов и браузерного E2E нужен **отдельный тестовый сервер PostgreSQL** и роль с `CREATEDB`. Например, запустите временный контейнер:
+
 ```sh
+docker run --rm -d --name themed-chat-test-db -e POSTGRES_PASSWORD=test-only -p 127.0.0.1:55432:5432 postgres:17-alpine
+docker exec themed-chat-test-db pg_isready -h 127.0.0.1 -U postgres
+export TEST_POSTGRES_URL='postgresql+asyncpg://postgres:test-only@127.0.0.1:55432/postgres?ssl=disable'
 make check
 uv run --locked --group browser playwright install chromium
 make e2e
+docker stop themed-chat-test-db
 ```
 
-`make check` проверяет lock-файл, Ruff, типы mypy, документацию, unit- и HTTP/API-тесты. Для прогона общего интеграционного контракта ещё и на PostgreSQL задайте `TEST_POSTGRES_URL` до запуска `make check`: используйте отдельный тестовый сервер и роль с правом `CREATEDB`. Тест создаёт и удаляет только свою временную БД. Браузерный тест использует Chromium и запускает реальный HTTP-сервер с временной SQLite. Тестовый набор не требует ключа Gemini; адаптер отдельно проверяется с реальным SDK и локальной подменой HTTP-транспорта.
+Если `pg_isready` ещё не подтверждает готовность, повторите проверку перед запуском тестов. Не используйте сервер с рабочими данными. Каждый тест с БД создаёт и удаляет только свою временную базу. `make check` проверяет lock-файл, Ruff, mypy, документацию, unit- и HTTP/API-тесты. E2E запускает настоящий HTTP-сервер, Chromium и PostgreSQL. Ключ Gemini для тестов не нужен: адаптер проверяется с реальным SDK и подменой HTTP-транспорта.
 
 ## Что можно доработать
 

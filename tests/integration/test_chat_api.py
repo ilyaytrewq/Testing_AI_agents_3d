@@ -49,6 +49,7 @@ async def test_authorized_guest_can_send_and_read_shared_history() -> None:
             APP_ACCESS_KEY=SecretStr("chat_test_key"),
             APP_SESSION_SECRET=SecretStr("chat-test-signing-secret-long-enough"),
             GEMINI_API_KEY=SecretStr("unused-provider-key"),
+            DATABASE_URL=SecretStr("postgresql+asyncpg://unused.test/chat"),
         ),
     )
     generator = Generator()

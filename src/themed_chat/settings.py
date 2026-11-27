@@ -44,18 +44,6 @@ class ModelSettings(ConfigSection):
     max_output_tokens: Annotated[int, Field(gt=0, le=8192)] = 1024
 
 
-class DatabaseSettings(ConfigSection):
-    backend: Literal["sqlite", "postgresql"] | None = None
-    sqlite_path: Path | None = None
-
-    @field_validator("sqlite_path", mode="before")
-    @classmethod
-    def validate_sqlite_path(cls, value: object) -> object:
-        if isinstance(value, str) and (not value.strip() or value.strip() == ":memory:"):
-            raise ValueError("use a persistent SQLite file")
-        return value
-
-
 class AuthSettings(ConfigSection):
     public_origin: str = "http://127.0.0.1:8000"
     session_ttl_seconds: Annotated[int, Field(ge=1, le=604800)] = 28800
@@ -86,14 +74,12 @@ class AuthSettings(ConfigSection):
 class AppSettings(ConfigSection):
     chat: ChatSettings = ChatSettings()
     llm: ModelSettings
-    db: DatabaseSettings = DatabaseSettings()
     auth: AuthSettings = AuthSettings()
 
 
 APP_SECTIONS: dict[str, type[ConfigSection]] = {
     "chat": ChatSettings,
     "llm": ModelSettings,
-    "db": DatabaseSettings,
     "auth": AuthSettings,
 }
 
@@ -125,7 +111,7 @@ class SecretSettings(ConfigSection):
     access_key: SecretStr = Field(validation_alias="APP_ACCESS_KEY")
     session_secret: SecretStr = Field(validation_alias="APP_SESSION_SECRET")
     gemini_api_key: SecretStr = Field(validation_alias="GEMINI_API_KEY")
-    database_url: SecretStr | None = Field(default=None, validation_alias="DATABASE_URL")
+    database_url: SecretStr = Field(validation_alias="DATABASE_URL")
 
     @field_validator("access_key")
     @classmethod
@@ -143,8 +129,8 @@ class SecretSettings(ConfigSection):
 
     @field_validator("gemini_api_key", "database_url")
     @classmethod
-    def validate_nonblank_secret(cls, value: SecretStr | None) -> SecretStr | None:
-        if value is not None and not value.get_secret_value().strip():
+    def validate_nonblank_secret(cls, value: SecretStr) -> SecretStr:
+        if not value.get_secret_value().strip():
             raise ValueError("the value must not be blank")
         return value
 
@@ -190,6 +176,4 @@ def load_settings(
         raise ConfigurationError(f"Invalid or missing secrets: {detail}.") from None
     except (OSError, ValueError):
         raise ConfigurationError("Could not read the local secrets file.") from None
-    if app.db.backend == "postgresql" and secrets.database_url is None:
-        raise ConfigurationError("DATABASE_URL is required with the postgresql backend.")
     return Settings(app=app, secrets=secrets)

@@ -7,6 +7,7 @@ DOTENV = (
     "APP_ACCESS_KEY=sample_key\n"
     "APP_SESSION_SECRET=0123456789abcdef0123456789abcdef\n"
     "GEMINI_API_KEY=sample-provider-key\n"
+    "DATABASE_URL=postgresql+asyncpg://unused.test/chat\n"
 )
 CONFIG = """
 llm:
@@ -59,9 +60,9 @@ def test_postgresql_requires_a_secret_dsn(tmp_path: Path, monkeypatch: pytest.Mo
 
     monkeypatch.delenv("DATABASE_URL", raising=False)
     config_file = tmp_path / "app.yaml"
-    config_file.write_text(CONFIG + "\ndb: {backend: postgresql}\n", encoding="utf-8")
+    config_file.write_text(CONFIG, encoding="utf-8")
     env_file = tmp_path / ".env"
-    env_file.write_text(DOTENV, encoding="utf-8")
+    env_file.write_text(DOTENV.split("DATABASE_URL=")[0], encoding="utf-8")
     with pytest.raises(ConfigurationError, match="DATABASE_URL"):
         load_settings(config_file, env_file=env_file)
 
@@ -122,7 +123,11 @@ def test_debug_logging_does_not_emit_secrets(
     monkeypatch.setenv("APP_ACCESS_KEY", "debug_fixture_key")
     monkeypatch.setenv("APP_SESSION_SECRET", "separate-synthetic-debug-signing-key-1")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    env_file.write_text("GEMINI_API_KEY=debug-fixture-provider-key\n", encoding="utf-8")
+    env_file.write_text(
+        "GEMINI_API_KEY=debug-fixture-provider-key\n"
+        "DATABASE_URL=postgresql+asyncpg://unused.test/chat\n",
+        encoding="utf-8",
+    )
     monkeypatch.setenv("PYDANTIC_SETTINGS_DEBUG", "1")
     with caplog.at_level("DEBUG", logger="pydantic_settings"):
         settings = load_settings(config, env_file=env_file)

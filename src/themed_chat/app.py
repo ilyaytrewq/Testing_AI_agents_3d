@@ -60,9 +60,8 @@ def create_app(
                     InternalClientError,
                     PostgresError,
                 ):
-                    backend = "PostgreSQL" if engine.dialect.name == "postgresql" else "SQLite"
                     raise ConfigurationError(
-                        f"Could not initialize {backend}. "
+                        "Could not initialize PostgreSQL. "
                         "Check connectivity and database permissions."
                     ) from None
             if generator is not None:

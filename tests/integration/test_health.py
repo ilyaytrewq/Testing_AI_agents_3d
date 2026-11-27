@@ -4,29 +4,33 @@ from pathlib import Path
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from pydantic import SecretStr
 
 
 @pytest.fixture
-def sqlite_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def deployment_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, postgres_dsn: SecretStr
+) -> None:
     config_bytes = Path("config/app.yaml").read_bytes()
     monkeypatch.chdir(tmp_path)
     Path("config").mkdir()
     Path("config/app.yaml").write_bytes(config_bytes)
-    monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.setenv("APP_DB__BACKEND", "sqlite")
-    monkeypatch.setenv("APP_DB__SQLITE_PATH", str(tmp_path / "chat.sqlite3"))
+    monkeypatch.setenv("DATABASE_URL", postgres_dsn.get_secret_value())
     monkeypatch.setenv("APP_ACCESS_KEY", "test-key")
     monkeypatch.setenv("APP_SESSION_SECRET", "unit-test-signing-secret-at-least-32-chars")
     monkeypatch.setenv("GEMINI_API_KEY", "test-provider-key")
 
 
 @pytest.mark.anyio
-@pytest.mark.usefixtures("sqlite_env")
+@pytest.mark.usefixtures("deployment_env")
 async def test_installed_app_serves_health_check() -> None:
     module_name = "themed_chat.app"
     assert find_spec(module_name) is not None, "the application factory is not installed"
     app = import_module(module_name).create_app()
-    async with AsyncClient(transport=ASGITransport(app), base_url="http://test") as client:
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app), base_url="http://test") as client,
+    ):
         response = await client.get("/healthz")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}

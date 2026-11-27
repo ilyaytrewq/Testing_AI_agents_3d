@@ -1,20 +1,13 @@
 import asyncio
-from collections.abc import AsyncIterator
-from os import environ
-from pathlib import Path
-from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from pydantic import SecretStr
-from sqlalchemy.engine import make_url
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from themed_chat.app import create_app
 from themed_chat.chat.service import GenerationTimeout
 from themed_chat.settings import (
     AppSettings,
-    DatabaseSettings,
     ModelSettings,
     SecretSettings,
     Settings,
@@ -31,45 +24,15 @@ class FixtureGenerator:
         return f"Reply: {text}"
 
 
-@pytest.fixture(params=["sqlite", *(["postgresql"] if environ.get("TEST_POSTGRES_URL") else [])])
-async def storage(
-    request: pytest.FixtureRequest, tmp_path: Path
-) -> AsyncIterator[tuple[DatabaseSettings, SecretStr | None]]:
-    if request.param == "sqlite":
-        yield DatabaseSettings(sqlite_path=tmp_path / "chat.sqlite3"), None
-        return
-
-    admin_url = make_url(environ["TEST_POSTGRES_URL"])
-    database = f"themed_chat_test_{uuid4().hex}"
-    admin = create_async_engine(admin_url, isolation_level="AUTOCOMMIT", hide_parameters=True)
-    try:
-        async with admin.connect() as conn:
-            await conn.exec_driver_sql(f'CREATE DATABASE "{database}"')
-        try:
-            url = admin_url.set(database=database).render_as_string(hide_password=False)
-            yield DatabaseSettings(), SecretStr(url)
-        finally:
-            async with admin.connect() as conn:
-                await conn.exec_driver_sql(f'DROP DATABASE "{database}"')
-    finally:
-        await admin.dispose()
-
-
 @pytest.mark.anyio
-async def test_history_is_atomic_shared_and_persistent(
-    storage: tuple[DatabaseSettings, SecretStr | None],
-) -> None:
-    db, url = storage
+async def test_history_is_atomic_shared_and_persistent(postgres_dsn: SecretStr) -> None:
     settings = Settings(
-        AppSettings(
-            llm=ModelSettings(model="fixture", system_prompt="fixture"),
-            db=db,
-        ),
+        AppSettings(llm=ModelSettings(model="fixture", system_prompt="fixture")),
         SecretSettings(
             APP_ACCESS_KEY=SecretStr("history_test_key"),
             APP_SESSION_SECRET=SecretStr("session-secret-for-the-persistence-fixture"),
             GEMINI_API_KEY=SecretStr("unused-provider-key"),
-            DATABASE_URL=url,
+            DATABASE_URL=postgres_dsn,
         ),
     )
     app = create_app(settings, generator=FixtureGenerator())

@@ -41,6 +41,7 @@ async def client(guest_store: Guests) -> AsyncIterator[AsyncClient]:
             APP_ACCESS_KEY=SecretStr(ACCESS_KEY),
             APP_SESSION_SECRET=SecretStr(SIGNING_KEY),
             GEMINI_API_KEY=SecretStr("fixture-key"),
+            DATABASE_URL=SecretStr("postgresql+asyncpg://unused.test/chat"),
         ),
     )
     app = create_app(settings, guests=guest_store, repository=guest_store)

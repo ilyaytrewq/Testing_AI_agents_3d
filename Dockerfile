@@ -9,9 +9,7 @@ COPY pyproject.toml uv.lock .python-version ./
 RUN uv sync --locked --no-dev --no-install-project
 COPY src ./src
 COPY config ./config
-RUN uv sync --locked --no-dev --no-editable \
-    && mkdir /data \
-    && chown 10001:10001 /data
+RUN uv sync --locked --no-dev --no-editable
 
 USER 10001:10001
 EXPOSE 8000

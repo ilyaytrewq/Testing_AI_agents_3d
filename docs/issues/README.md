@@ -20,3 +20,4 @@ references: {}
 - [#10 Package and verify the project](0010-compose-delivery.md)
 - [#11 Translate the default system prompt into English](0011-english-system-prompt.md)
 - [#12 Move database deployment out of application YAML](0012-compose-storage.md)
+- [#13 Use PostgreSQL as the only database](0013-postgresql-only.md)

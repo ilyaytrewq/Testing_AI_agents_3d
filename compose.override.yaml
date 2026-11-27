@@ -1,0 +1,22 @@
+services:
+  chat:
+    environment:
+      DATABASE_URL: postgresql+asyncpg://themed_chat:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env for local PostgreSQL}@postgres:5432/themed_chat?ssl=disable
+    depends_on:
+      postgres:
+        condition: service_healthy
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: themed_chat
+      POSTGRES_DB: themed_chat
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env for local PostgreSQL}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "themed_chat", "-d", "themed_chat"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+volumes:
+  postgres-data:
