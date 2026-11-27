@@ -18,3 +18,4 @@ references: {}
 - [#8 Build the chat page](0008-chat-ui.md)
 - [#9 Verify the PostgreSQL profile](0009-postgres-contract.md)
 - [#10 Package and verify the project](0010-compose-delivery.md)
+- [#11 Translate the default system prompt into English](0011-english-system-prompt.md)

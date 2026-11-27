@@ -6,7 +6,7 @@ references:
   "Dockerfile": "6f1855332a0b4a178ba9dac5d95a335b7d364e869894419342ba18faddc8e3a7"
   "Makefile": "b933dae1091c89574efc9b985112e528b5ca0b772ac6c16ff40edd50be4c080c"
   "compose.yaml": "260f31c296d932bf12aa8721eeb4bdb6dbc23b06cf15565fd5911eb21e172725"
-  "config/app.yaml": "7436d4b3c9f20d4f473ebdfdec143348a8857c5344e166145cd50b060b921362"
+  "config/app.yaml": "46985754677e84fc3ca99fc39608b7885ac9ab6cfed4bd2dc947983bfc9e9843"
   "pyproject.toml": "283a2bee8a0a14b500663e390e3bb7e140f97bfee58a167f7590fa783f6a2502"
   "src/themed_chat/adapters/database.py": "76e7ee92fe2586db57181c0702d5d92578dfc0ac45a18851c659ac9ff1c5c897"
   "src/themed_chat/api/auth_middleware.py": "a4d8602f02fe940281ce692972dc00ebda04af2f34ba2404e3cdff7f9ecaabe4"
