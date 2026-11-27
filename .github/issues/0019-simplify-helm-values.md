@@ -2,7 +2,7 @@
 title: "Remove the dedicated Frontier Helm values file"
 description: "Pass the model and endpoint as normal release values and clarify the production database secret."
 id: 19
-status: "In progress"
+status: "Done"
 labels: []
 weight: 1
 references: {}
