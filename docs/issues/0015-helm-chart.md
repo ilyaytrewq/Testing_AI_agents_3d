@@ -2,7 +2,7 @@
 title: "Deploy the chat with Helm"
 description: "Deploy the chat in Kubernetes against a pre-existing PostgreSQL database."
 id: 15
-status: "In progress"
+status: "Done"
 labels: []
 weight: 2
 references: {}

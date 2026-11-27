@@ -2,7 +2,7 @@
 title: "Consolidate local Docker Compose"
 description: "Use one explicitly selected Compose file for the local app and PostgreSQL."
 id: 14
-status: "In progress"
+status: "Done"
 labels: []
 weight: 1
 references: {}
