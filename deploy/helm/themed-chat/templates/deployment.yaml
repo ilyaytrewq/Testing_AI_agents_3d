@@ -1,17 +1,11 @@
 {{- $secret := required "existingSecret is required (name of a Kubernetes Secret)" .Values.existingSecret -}}
 {{- $repository := required "image.repository is required" .Values.image.repository -}}
 {{- $tag := required "image.tag is required" .Values.image.tag -}}
-{{- $provider := .Values.llm.provider -}}
-{{- if not (has $provider (list "gemini" "openai_compatible")) -}}
-{{- fail "llm.provider must be gemini or openai_compatible" -}}
-{{- end -}}
 {{- $model := .Values.llm.model -}}
 {{- $baseURL := .Values.llm.baseUrl -}}
-{{- if eq $provider "openai_compatible" -}}
-{{- $model = required "llm.model is required for openai_compatible" $model -}}
-{{- $baseURL = required "llm.baseUrl is required for openai_compatible" $baseURL -}}
+{{- if ne (empty $model) (empty $baseURL) -}}
+{{- fail "llm.model and llm.baseUrl must be set together" -}}
 {{- end -}}
-{{- $providerKey := ternary "GEMINI_API_KEY" "OPENAI_COMPATIBLE_API_KEY" (eq $provider "gemini") -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -56,17 +50,13 @@ spec:
           env:
             - name: APP_AUTH__PUBLIC_ORIGIN
               value: {{ required "publicOrigin is required" .Values.publicOrigin | quote }}
-            - name: APP_LLM__PROVIDER
-              value: {{ $provider | quote }}
             {{- if $model }}
             - name: APP_LLM__MODEL
               value: {{ $model | quote }}
-            {{- end }}
-            {{- if $baseURL }}
             - name: APP_LLM__BASE_URL
               value: {{ $baseURL | quote }}
             {{- end }}
-            {{- range list "APP_ACCESS_KEY" "APP_SESSION_SECRET" "DATABASE_URL" $providerKey }}
+            {{- range list "APP_ACCESS_KEY" "APP_SESSION_SECRET" "DATABASE_URL" "LLM_API_KEY" }}
             - name: {{ . }}
               valueFrom:
                 secretKeyRef:

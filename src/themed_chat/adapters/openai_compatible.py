@@ -7,7 +7,7 @@ from openai import APIError, APITimeoutError, AsyncOpenAI, Omit
 from pydantic import SecretStr
 
 from themed_chat.chat.service import GenerationError, GenerationTimeout
-from themed_chat.settings import ConfigurationError, ModelSettings
+from themed_chat.settings import ModelSettings
 
 
 class _CompatibleClient(AsyncOpenAI):
@@ -51,8 +51,6 @@ class OpenAICompatibleGenerator:
 async def connect_openai_compatible(
     settings: ModelSettings, key: SecretStr
 ) -> AsyncIterator[OpenAICompatibleGenerator]:
-    if settings.base_url is None:
-        raise ConfigurationError("llm.base_url is required for openai_compatible.")
     async with (
         AsyncClient(follow_redirects=False, timeout=settings.timeout_seconds) as http,
         _CompatibleClient(

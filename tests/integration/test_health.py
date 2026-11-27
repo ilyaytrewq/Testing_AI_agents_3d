@@ -18,7 +18,7 @@ def deployment_env(
     monkeypatch.setenv("DATABASE_URL", postgres_dsn.get_secret_value())
     monkeypatch.setenv("APP_ACCESS_KEY", "test-key")
     monkeypatch.setenv("APP_SESSION_SECRET", "unit-test-signing-secret-at-least-32-chars")
-    monkeypatch.setenv("GEMINI_API_KEY", "test-provider-key")
+    monkeypatch.setenv("LLM_API_KEY", "test-provider-key")
 
 
 @pytest.mark.anyio
@@ -44,7 +44,7 @@ def test_factory_rejects_missing_secrets(monkeypatch: pytest.MonkeyPatch, tmp_pa
     monkeypatch.chdir(tmp_path)
     Path("config").mkdir()
     Path("config/app.yaml").write_text(config, encoding="utf-8")
-    for name in ("APP_ACCESS_KEY", "APP_SESSION_SECRET", "GEMINI_API_KEY"):
+    for name in ("APP_ACCESS_KEY", "APP_SESSION_SECRET", "LLM_API_KEY"):
         monkeypatch.delenv(name, raising=False)
     with pytest.raises(ConfigurationError, match="APP_ACCESS_KEY"):
         create_app()

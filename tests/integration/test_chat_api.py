@@ -45,11 +45,15 @@ class Repository:
 @pytest.mark.anyio
 async def test_authorized_guest_can_send_and_read_shared_history() -> None:
     settings = Settings(
-        AppSettings(llm=ModelSettings(model="fixture", system_prompt="fixture")),
+        AppSettings(
+            llm=ModelSettings(
+                base_url="https://unused.test/v1", model="fixture", system_prompt="fixture"
+            )
+        ),
         SecretSettings(
             APP_ACCESS_KEY=SecretStr("chat_test_key"),
             APP_SESSION_SECRET=SecretStr("chat-test-signing-secret-long-enough"),
-            GEMINI_API_KEY=SecretStr("unused-provider-key"),
+            LLM_API_KEY=SecretStr("unused-provider-key"),
             DATABASE_URL=SecretStr("postgresql+asyncpg://unused.test/chat"),
         ),
     )
@@ -101,11 +105,20 @@ def test_custom_guest_store_requires_matching_chat_store() -> None:
 
 
 @pytest.mark.anyio
-async def test_app_selects_openai_compatible_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("base_url", "model"),
+    [
+        ("https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-3.8-flash"),
+        ("https://klinskoe17.frontierai.ru/v1", "glm-5.3-flash-cb"),
+    ],
+)
+async def test_app_calls_chat_completions_at_configured_url(
+    monkeypatch: pytest.MonkeyPatch, base_url: str, model: str
+) -> None:
     def respond(request: Request) -> Response:
-        assert str(request.url) == "https://qwen.test/compatible-mode/v1/chat/completions"
-        assert request.headers["authorization"] == "Bearer qwen-fixture"
-        assert json.loads(request.content)["model"] == "qwen-plus"
+        assert str(request.url) == base_url.rstrip("/") + "/chat/completions"
+        assert request.headers["authorization"] == "Bearer fixture-token"
+        assert json.loads(request.content)["model"] == model
         return Response(200, json={"choices": [{"message": {"content": "Use a filter."}}]})
 
     http = AsyncClient(transport=MockTransport(respond))
@@ -113,16 +126,15 @@ async def test_app_selects_openai_compatible_provider(monkeypatch: pytest.Monkey
     settings = Settings(
         AppSettings(
             llm=ModelSettings(
-                provider="openai_compatible",
-                base_url="https://qwen.test/compatible-mode/v1",
-                model="qwen-plus",
+                base_url=base_url,
+                model=model,
                 system_prompt="Coffee only",
             )
         ),
         SecretSettings(
             APP_ACCESS_KEY=SecretStr("chat_test_key"),
             APP_SESSION_SECRET=SecretStr("chat-test-signing-secret-long-enough"),
-            OPENAI_COMPATIBLE_API_KEY=SecretStr("qwen-fixture"),
+            LLM_API_KEY=SecretStr("fixture-token"),
             DATABASE_URL=SecretStr("postgresql+asyncpg://unused.test/chat"),
         ),
     )

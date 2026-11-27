@@ -40,12 +40,14 @@ async def web_url(postgres_dsn: SecretStr) -> AsyncIterator[str]:
         settings = Settings(
             AppSettings(
                 auth=AuthSettings(public_origin=base_url),
-                llm=ModelSettings(model="fixture", system_prompt="fixture"),
+                llm=ModelSettings(
+                    base_url="https://unused.test/v1", model="fixture", system_prompt="fixture"
+                ),
             ),
             SecretSettings(
                 APP_ACCESS_KEY=SecretStr(ACCESS_KEY),
                 APP_SESSION_SECRET=SecretStr("long-test-secret-only-for-browser-testing"),
-                GEMINI_API_KEY=SecretStr("unused-fixture-value"),
+                LLM_API_KEY=SecretStr("unused-fixture-value"),
                 DATABASE_URL=postgres_dsn,
             ),
         )

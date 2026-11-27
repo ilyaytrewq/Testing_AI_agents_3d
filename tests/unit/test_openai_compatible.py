@@ -12,9 +12,8 @@ from themed_chat.settings import ModelSettings
 BASE = "https://qwen.test/compatible-mode/v1"
 
 
-def settings(timeout_seconds: float = 1) -> ModelSettings:
+def settings(timeout_seconds: float = 5) -> ModelSettings:
     return ModelSettings(
-        provider="openai_compatible",
         base_url=BASE,
         model="qwen-plus",
         system_prompt="Coffee only",

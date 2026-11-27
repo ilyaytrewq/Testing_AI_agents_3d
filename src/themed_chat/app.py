@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from contextlib import AbstractAsyncContextManager, asynccontextmanager
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from asyncpg import InterfaceError, InternalClientError, PostgresError
@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from starlette.middleware.sessions import SessionMiddleware
 
 from themed_chat.adapters.database import create_database_engine, migrate_database
-from themed_chat.adapters.gemini import connect_gemini
 from themed_chat.adapters.openai_compatible import connect_openai_compatible
 from themed_chat.adapters.sql_repository import SqlChatRepository, SqlGuestRepository
 from themed_chat.api.auth_middleware import SESSION_COOKIE, AuthMiddleware
@@ -21,14 +20,6 @@ from themed_chat.api.session_routes import session_routes
 from themed_chat.chat.ports import ChatRepository, GuestRepository, TextGenerator
 from themed_chat.chat.service import ChatService
 from themed_chat.settings import ConfigurationError, Settings, load_settings
-
-
-def connect_generator(settings: Settings) -> AbstractAsyncContextManager[TextGenerator]:
-    llm = settings.app.llm
-    key = settings.provider_api_key()
-    if llm.provider == "openai_compatible":
-        return connect_openai_compatible(llm, key)
-    return connect_gemini(llm, key)
 
 
 def create_app(
@@ -76,7 +67,9 @@ def create_app(
             if generator is not None:
                 yield
             else:
-                async with connect_generator(configuration) as adapter:
+                async with connect_openai_compatible(
+                    configuration.app.llm, configuration.secrets.llm_api_key
+                ) as adapter:
                     service = ChatService(store, adapter)
                     try:
                         yield

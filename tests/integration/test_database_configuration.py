@@ -23,7 +23,7 @@ def deployment_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     for name, value in {
         "APP_ACCESS_KEY": "compose_fixture_key",
         "APP_SESSION_SECRET": "test-database-signing-secret-not-production",
-        "GEMINI_API_KEY": "unused-fixture",
+        "LLM_API_KEY": "unused-fixture",
     }.items():
         monkeypatch.setenv(name, value)
     return tmp_path / ".env"
@@ -79,11 +79,13 @@ def test_application_requires_postgresql_dsn_even_with_a_legacy_file_path(
 
 def postgres_settings(url: str) -> Settings:
     return Settings(
-        AppSettings(llm=ModelSettings(model="test", system_prompt="test")),
+        AppSettings(
+            llm=ModelSettings(base_url="https://unused.test/v1", model="test", system_prompt="test")
+        ),
         SecretSettings(
             APP_ACCESS_KEY=SecretStr("postgres_fixture_key"),
             APP_SESSION_SECRET=SecretStr("fixture-session-secret-not-for-production"),
-            GEMINI_API_KEY=SecretStr("unused"),
+            LLM_API_KEY=SecretStr("unused"),
             DATABASE_URL=SecretStr(url),
         ),
     )

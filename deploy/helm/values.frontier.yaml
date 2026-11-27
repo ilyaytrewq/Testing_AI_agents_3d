@@ -1,0 +1,3 @@
+llm:
+  baseUrl: https://klinskoe17.frontierai.ru/v1
+  model: glm-5.3-flash-cb

@@ -22,11 +22,13 @@ ACCESS_KEY = "sql_fixture_key"
 @pytest.mark.anyio
 async def test_guest_survives_application_restart(postgres_dsn: SecretStr) -> None:
     settings = Settings(
-        AppSettings(llm=ModelSettings(model="test", system_prompt="test")),
+        AppSettings(
+            llm=ModelSettings(base_url="https://unused.test/v1", model="test", system_prompt="test")
+        ),
         SecretSettings(
             APP_ACCESS_KEY=SecretStr(ACCESS_KEY),
             APP_SESSION_SECRET=SecretStr("long-test-secret-for-session-signatures"),
-            GEMINI_API_KEY=SecretStr("fixture-key"),
+            LLM_API_KEY=SecretStr("fixture-key"),
             DATABASE_URL=postgres_dsn,
         ),
     )

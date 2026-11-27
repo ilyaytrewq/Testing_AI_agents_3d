@@ -27,11 +27,15 @@ class FixtureGenerator:
 @pytest.mark.anyio
 async def test_history_is_atomic_shared_and_persistent(postgres_dsn: SecretStr) -> None:
     settings = Settings(
-        AppSettings(llm=ModelSettings(model="fixture", system_prompt="fixture")),
+        AppSettings(
+            llm=ModelSettings(
+                base_url="https://unused.test/v1", model="fixture", system_prompt="fixture"
+            )
+        ),
         SecretSettings(
             APP_ACCESS_KEY=SecretStr("history_test_key"),
             APP_SESSION_SECRET=SecretStr("session-secret-for-the-persistence-fixture"),
-            GEMINI_API_KEY=SecretStr("unused-provider-key"),
+            LLM_API_KEY=SecretStr("unused-provider-key"),
             DATABASE_URL=postgres_dsn,
         ),
     )

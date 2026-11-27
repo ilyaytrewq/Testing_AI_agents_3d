@@ -6,11 +6,12 @@ import pytest
 DOTENV = (
     "APP_ACCESS_KEY=sample_key\n"
     "APP_SESSION_SECRET=0123456789abcdef0123456789abcdef\n"
-    "GEMINI_API_KEY=sample-provider-key\n"
+    "LLM_API_KEY=sample-provider-key\n"
     "DATABASE_URL=postgresql+asyncpg://unused.test/chat\n"
 )
 CONFIG = """
 llm:
+  base_url: https://llm.test/v1
   model: fixture-model
   system_prompt: |-
     First line.
@@ -30,13 +31,13 @@ def test_process_environment_overrides_yaml_and_dotenv(
     env_file.write_text(DOTENV, encoding="utf-8")
     monkeypatch.setenv("APP_LLM__MODEL", "override-model")
     monkeypatch.setenv("APP_ACCESS_KEY", "override_key")
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     configuration = load_settings(yaml_file, env_file=env_file)
 
     assert configuration.app.llm.model == "override-model"
     assert configuration.app.llm.system_prompt == "First line.\nSecond line."
     assert configuration.secrets.access_key.get_secret_value() == "override_key"
-    assert configuration.secrets.gemini_api_key.get_secret_value() == "sample-provider-key"
+    assert configuration.secrets.llm_api_key.get_secret_value() == "sample-provider-key"
 
 
 def test_invalid_secret_is_not_in_configuration_error(
@@ -108,7 +109,9 @@ def test_origin_is_serialized_like_a_browser(value: str, expected: str) -> None:
 def test_default_timeout_has_the_declared_float_type() -> None:
     from themed_chat.settings import ModelSettings
 
-    model = ModelSettings(model="test", system_prompt="test prompt")
+    model = ModelSettings(
+        base_url="https://unused.test/v1", model="test", system_prompt="test prompt"
+    )
     assert type(model.timeout_seconds) is float
 
 
@@ -122,16 +125,16 @@ def test_debug_logging_does_not_emit_secrets(
     env_file = tmp_path / ".env"
     monkeypatch.setenv("APP_ACCESS_KEY", "debug_fixture_key")
     monkeypatch.setenv("APP_SESSION_SECRET", "separate-synthetic-debug-signing-key-1")
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     env_file.write_text(
-        "GEMINI_API_KEY=debug-fixture-provider-key\n"
+        "LLM_API_KEY=debug-fixture-provider-key\n"
         "DATABASE_URL=postgresql+asyncpg://unused.test/chat\n",
         encoding="utf-8",
     )
     monkeypatch.setenv("PYDANTIC_SETTINGS_DEBUG", "1")
     with caplog.at_level("DEBUG", logger="pydantic_settings"):
         settings = load_settings(config, env_file=env_file)
-    assert settings.secrets.gemini_api_key.get_secret_value() == "debug-fixture-provider-key"
+    assert settings.secrets.llm_api_key.get_secret_value() == "debug-fixture-provider-key"
     for value in (
         "debug_fixture_key",
         "separate-synthetic-debug-signing-key-1",
@@ -154,56 +157,24 @@ def test_rejected_yaml_values_are_not_logged(
     assert marker not in caplog.text
 
 
-def test_openai_compatible_uses_its_own_key(
+def test_generic_model_uses_the_same_secret_name_for_any_endpoint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from themed_chat.settings import load_settings
 
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
+    monkeypatch.delenv("LLM_API_KEY", raising=False)
     config = tmp_path / "app.yaml"
-    config.write_text(
-        CONFIG + "  provider: openai_compatible\n  base_url: https://qwen.test/compatible-mode/v1\n"
-    )
+    config.write_text(CONFIG, encoding="utf-8")
     env_file = tmp_path / ".env"
-    env_file.write_text(
-        DOTENV.replace(
-            "GEMINI_API_KEY=sample-provider-key", "OPENAI_COMPATIBLE_API_KEY=qwen-fixture"
-        )
-    )
+    env_file.write_text(DOTENV.replace("sample-provider-key", "fixture-token"))
     settings = load_settings(config, env_file=env_file)
-    assert settings.app.llm.provider == "openai_compatible"
-    assert settings.app.llm.base_url == "https://qwen.test/compatible-mode/v1"
-    assert settings.provider_api_key().get_secret_value() == "qwen-fixture"
-
-
-@pytest.mark.parametrize("provider", ["gemini", "openai_compatible"])
-def test_selected_provider_requires_its_key(
-    provider: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    from themed_chat.settings import ConfigurationError, load_settings
-
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
-    config = tmp_path / "app.yaml"
-    config.write_text(
-        CONFIG + f"  provider: {provider}\n  base_url: https://provider.test/v1\n", encoding="utf-8"
-    )
-    key = {"gemini": "GEMINI_API_KEY", "openai_compatible": "OPENAI_COMPATIBLE_API_KEY"}[provider]
-    other = {"gemini": "OPENAI_COMPATIBLE_API_KEY", "openai_compatible": "GEMINI_API_KEY"}[provider]
-    env_file = tmp_path / ".env"
-    env_file.write_text(
-        DOTENV.replace("GEMINI_API_KEY=sample-provider-key\n", "") + f"{key}=\n{other}=unused\n",
-        encoding="utf-8",
-    )
-    with pytest.raises(ConfigurationError, match=key):
-        load_settings(config, env_file=env_file)
+    assert settings.app.llm.base_url == "https://llm.test/v1"
+    assert settings.secrets.llm_api_key.get_secret_value() == "fixture-token"
 
 
 @pytest.mark.parametrize(
     "base_url",
     [
-        None,
         "file:///tmp/private",
         "https://test:secret@host/v1",
         "https://host/v1?key=secret",
@@ -211,7 +182,7 @@ def test_selected_provider_requires_its_key(
     ],
 )
 def test_compatible_base_url_is_required_and_is_not_a_secret_or_an_operation(
-    base_url: str | None,
+    base_url: str,
 ) -> None:
     from pydantic import ValidationError
 
@@ -219,7 +190,6 @@ def test_compatible_base_url_is_required_and_is_not_a_secret_or_an_operation(
 
     with pytest.raises(ValidationError) as error:
         ModelSettings(
-            provider="openai_compatible",
             base_url=base_url,
             model="qwen-plus",
             system_prompt="Coffee only",

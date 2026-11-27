@@ -39,12 +39,15 @@ def test_helm_runs_one_non_root_replica_with_external_secrets(helm: str) -> None
     assert pod["automountServiceAccountToken"] is False
     assert pod["securityContext"]["runAsNonRoot"] is True
     container = pod["containers"][0]
-    expected_secrets = {"DATABASE_URL", "APP_ACCESS_KEY", "APP_SESSION_SECRET", "GEMINI_API_KEY"}
+    expected_secrets = {"DATABASE_URL", "APP_ACCESS_KEY", "APP_SESSION_SECRET", "LLM_API_KEY"}
     assert {
         value["name"]: value["valueFrom"]["secretKeyRef"]
         for value in container["env"]
         if "valueFrom" in value
     } == {key: {"name": "chat-runtime", "key": key} for key in expected_secrets}
+    assert {item["name"] for item in container["env"]}.isdisjoint(
+        {"APP_LLM__PROVIDER", "APP_LLM__MODEL", "APP_LLM__BASE_URL"}
+    )
     assert container["startupProbe"]["httpGet"]["path"] == "/healthz"
     assert container["readinessProbe"]["httpGet"]["path"] == "/healthz"
     service = documents["Service"]["spec"]
@@ -82,14 +85,19 @@ def test_helm_rejects_release_names_unsupported_by_the_service(release: str, hel
     assert "release name must start with a letter" in result.stderr
 
 
-def test_helm_selects_compatible_model_and_only_its_key(helm: str) -> None:
-    arguments = (
-        "image.repository=example.test/chat,existingSecret=chat-runtime,"
-        "llm.provider=openai_compatible,llm.baseUrl=https://qwen.test/compatible-mode/v1,"
-        "llm.model=qwen-plus"
-    )
+def test_helm_frontier_overlay_sets_only_model_and_endpoint(helm: str) -> None:
+    overlay = CHART.parent / "values.frontier.yaml"
     result = subprocess.run(
-        [helm, "template", "coffee", str(CHART), "--set-string", arguments],
+        [
+            helm,
+            "template",
+            "coffee",
+            str(CHART),
+            "-f",
+            str(overlay),
+            "--set-string",
+            "image.repository=example.test/chat,existingSecret=chat-runtime",
+        ],
         capture_output=True,
         text=True,
         check=True,
@@ -99,17 +107,19 @@ def test_helm_selects_compatible_model_and_only_its_key(helm: str) -> None:
         item["name"]: item
         for item in documents["Deployment"]["spec"]["template"]["spec"]["containers"][0]["env"]
     }
-    assert "GEMINI_API_KEY" not in env
-    assert env["OPENAI_COMPATIBLE_API_KEY"]["valueFrom"]["secretKeyRef"] == {
-        "name": "chat-runtime",
-        "key": "OPENAI_COMPATIBLE_API_KEY",
+    assert {name: item["value"] for name, item in env.items() if name.startswith("APP_LLM__")} == {
+        "APP_LLM__BASE_URL": "https://klinskoe17.frontierai.ru/v1",
+        "APP_LLM__MODEL": "glm-5.3-flash-cb",
     }
-    assert env["APP_LLM__PROVIDER"]["value"] == "openai_compatible"
-    assert env["APP_LLM__BASE_URL"]["value"] == "https://qwen.test/compatible-mode/v1"
-    assert env["APP_LLM__MODEL"]["value"] == "qwen-plus"
+    assert env["LLM_API_KEY"]["valueFrom"]["secretKeyRef"] == {
+        "name": "chat-runtime",
+        "key": "LLM_API_KEY",
+    }
+    assert set(yaml.safe_load(overlay.read_text(encoding="utf-8"))["llm"]) == {"baseUrl", "model"}
 
 
-def test_helm_requires_compatible_base_url(helm: str) -> None:
+@pytest.mark.parametrize("override", ["llm.model=qwen-plus", "llm.baseUrl=https://llm.test/v1"])
+def test_helm_rejects_one_sided_llm_overrides(helm: str, override: str) -> None:
     result = subprocess.run(
         [
             helm,
@@ -117,12 +127,11 @@ def test_helm_requires_compatible_base_url(helm: str) -> None:
             "coffee",
             str(CHART),
             "--set-string",
-            "image.repository=example.test/chat,existingSecret=chat-runtime,"
-            "llm.provider=openai_compatible,llm.model=qwen-plus",
+            f"image.repository=example.test/chat,existingSecret=chat-runtime,{override}",
         ],
         capture_output=True,
         text=True,
         check=False,
     )
     assert result.returncode != 0
-    assert "llm.baseUrl is required" in result.stderr
+    assert "llm.model and llm.baseUrl must be set together" in result.stderr

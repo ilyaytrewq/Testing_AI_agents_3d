@@ -1,7 +1,7 @@
 chat:
   title: Кофейный бариста
 llm:
-  provider: gemini
+  base_url: https://generativelanguage.googleapis.com/v1beta/openai/
   model: gemini-3.8-flash
   system_prompt: |-
     You are a home coffee brewing assistant. Reply in the user's language.
