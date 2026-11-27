@@ -1,3 +1,4 @@
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -85,18 +86,20 @@ def test_helm_rejects_release_names_unsupported_by_the_service(release: str, hel
     assert "release name must start with a letter" in result.stderr
 
 
-def test_helm_frontier_overlay_sets_only_model_and_endpoint(helm: str) -> None:
-    overlay = CHART.parent / "values.frontier.yaml"
+def test_helm_frontier_example_sets_model_and_endpoint(helm: str) -> None:
+    readme = (CHART.parents[2] / "README.md").read_text(encoding="utf-8")
+    example = readme.split("### Frontier AI в проде", 1)[1].split("## API", 1)[0]
+    overrides = re.findall(r'--set-string "(llm\.(?:baseUrl|model)=[^"]+)"', example)
+    assert len(overrides) == 2
     result = subprocess.run(
         [
             helm,
             "template",
             "coffee",
             str(CHART),
-            "-f",
-            str(overlay),
             "--set-string",
             "image.repository=example.test/chat,existingSecret=chat-runtime",
+            *(arg for value in overrides for arg in ("--set-string", value)),
         ],
         capture_output=True,
         text=True,
@@ -115,7 +118,6 @@ def test_helm_frontier_overlay_sets_only_model_and_endpoint(helm: str) -> None:
         "name": "chat-runtime",
         "key": "LLM_API_KEY",
     }
-    assert set(yaml.safe_load(overlay.read_text(encoding="utf-8"))["llm"]) == {"baseUrl", "model"}
 
 
 @pytest.mark.parametrize("override", ["llm.model=qwen-plus", "llm.baseUrl=https://llm.test/v1"])

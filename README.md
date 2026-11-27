@@ -7,7 +7,6 @@ references:
   ".dockerignore": "a90d30c8d1a25694dee6f5e1bd4e10f0a87b79a17bd8e6628b1e611197a2f2b0"
   "deploy/helm/themed-chat/Chart.yaml": "40212058339ec05ef383cef5c89b6f5cdcb036ebe1b799f5054a312a216e680f"
   "deploy/helm/themed-chat/values.yaml": "8604d80dbd50d0c62eb20c0db15bd85faa7f81d33432b7a50de938d79fe857d4"
-  "deploy/helm/values.frontier.yaml": "a804a8ec54bb59cbae62ae1376523ddbfa96f1b629faa22eb60b839945d17c03"
   "deploy/helm/themed-chat/templates/_helpers.tpl": "e47a8adb077e305c76a0a737bef092b8a799e4a7d72b9784e57dc537e74ba216"
   "deploy/helm/themed-chat/templates/deployment.yaml": "7d394517470d2bcfd104c02cb71eddea20203e20390235fb6c20ca846663f27f"
   "deploy/helm/themed-chat/templates/service.yaml": "c02ea24783b035be44fb5dd702b9572bad26fadb5839dd7f36d7a3c56b863c62"
@@ -72,7 +71,16 @@ LLM_API_KEY=your-frontier-api-key
 
 [Helm-чарт](deploy/helm/themed-chat/Chart.yaml) ставит только приложение: `Deployment` с одной репликой (`Recreate`) и `ClusterIP` на порту 8000. PostgreSQL, Ingress и готовый образ — ваши: соберите [Dockerfile](Dockerfile) и загрузите в свой реестр (для закрытого — `imagePullSecrets` в [values.yaml](deploy/helm/themed-chat/values.yaml)).
 
-Секреты положите в отдельный файл `KEY=value` с правами `0600` вне репозитория (не локальный `.env`): `APP_ACCESS_KEY`, `APP_SESSION_SECRET`, `DATABASE_URL`, `LLM_API_KEY`. URL и модель задаются вместе в `llm.baseUrl` и `llm.model` в [values.yaml](deploy/helm/themed-chat/values.yaml). Если оба поля пусты, используются настройки из [config/app.yaml](config/app.yaml).
+Для продового PostgreSQL укажите полную строку подключения в `DATABASE_URL` существующего Secret (`existingSecret`). Если создаёте Secret из файла, подготовьте `$HOME/.config/themed-chat/runtime.env` с правами `0600` вне репозитория:
+
+```dotenv
+APP_ACCESS_KEY=<ключ-доступа-к-чату>
+APP_SESSION_SECRET=<секрет-подписи-сессии>
+DATABASE_URL=postgresql+asyncpg://user:password@host:5432/themed_chat?ssl=verify-full
+LLM_API_KEY=<ключ-модели>
+```
+
+URL API модели и её ID задаются вместе в `llm.baseUrl` и `llm.model` в [values.yaml](deploy/helm/themed-chat/values.yaml) либо через `--set-string`. Если оба поля пусты, используются настройки из [config/app.yaml](config/app.yaml).
 
 ```sh
 kubectl create namespace themed-chat
@@ -86,23 +94,26 @@ kubectl -n themed-chat port-forward svc/coffee-themed-chat 8000:8000
 
 - Имя релиза: строчные латинские буквы, цифры и `-`, начинается с буквы.
 - За внешним шлюзом задайте `publicOrigin` — точный HTTPS-адрес без пути и `/` на конце (`https://chat.example.com`). Для `port-forward` на другой порт тоже поменяйте `publicOrigin`.
-- `DATABASE_URL`: `postgresql+asyncpg://user:password@host:5432/themed_chat?ssl=verify-full`. База должна существовать, роль — уметь применять миграции Alembic. Из параметров допустим только `ssl`, спецсимволы кодируйте (`$` → `%24`).
+- База PostgreSQL должна существовать, роль — уметь применять миграции Alembic. Из параметров `DATABASE_URL` допустим только `ssl`, спецсимволы в логине и пароле кодируйте (`$` → `%24`).
 - Частный CA: Secret с ключом `ca.crt`, его имя — в `postgresCASecret`.
 - Миграции идут при старте под advisory-блокировкой, параллельные Pod ждут друг друга.
 - После правки Secret: `kubectl -n themed-chat rollout restart deployment/coffee-themed-chat`. `helm uninstall` не удаляет Secret и БД.
 
 ### Frontier AI в проде
 
-[values.frontier.yaml](deploy/helm/values.frontier.yaml) задаёт адрес `https://klinskoe17.frontierai.ru/v1` и модель `glm-5.3-flash-cb` (GLM, не Qwen). Адрес самого чата (`publicOrigin`) не меняется.
+Передайте URL Frontier AI и модель GLM при обновлении релиза. Адрес самого чата (`publicOrigin`) не меняется.
 
-1. Добавьте **ключ Frontier AI** под именем `LLM_API_KEY` в существующий Kubernetes Secret, на который указывает `existingSecret`. Не заменяйте остальные ключи Secret и не передавайте токен в Helm values.
+1. Подготовьте Secret с ключом Frontier AI под именем `LLM_API_KEY` и теми же настройками приложения и БД. При переходе с другого сервиса используйте новый Secret, чтобы старый релиз мог откатиться со своим ключом. Не передавайте токен в Helm values.
 2. Обновите существующий релиз. Укажите имя релиза, namespace, контекст прод-кластера и новый тег образа, который читает `LLM_API_KEY`. Одного наличия OpenAI-совместимого адаптера в старом образе недостаточно.
 
 ```sh
 helm upgrade "${RELEASE:?Укажите имя релиза}" ./deploy/helm/themed-chat \
   --kube-context "${PROD_CONTEXT:?Укажите контекст прод-кластера}" \
   --namespace "${NAMESPACE:?Укажите namespace}" \
-  --reuse-values -f deploy/helm/values.frontier.yaml \
+  --reuse-values \
+  --set-string "llm.baseUrl=https://klinskoe17.frontierai.ru/v1" \
+  --set-string "llm.model=glm-5.3-flash-cb" \
+  --set-string "existingSecret=${RUNTIME_SECRET:?Укажите Secret с ключом Frontier AI}" \
   --set-string "image.tag=${IMAGE_TAG:?Укажите тег образа с LLM_API_KEY}" \
   --wait --timeout 5m
 ```

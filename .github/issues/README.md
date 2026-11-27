@@ -24,3 +24,4 @@ references: {}
 - [#16 Consolidate project documentation](0016-consolidate-readme.md)
 - [#17 Support OpenAI-compatible text generation](0017-openai-compatible.md)
 - [#18 Use one OpenAI-compatible LLM client](0018-single-llm.md)
+- [#19 Remove the dedicated Frontier Helm values file](0019-simplify-helm-values.md)
