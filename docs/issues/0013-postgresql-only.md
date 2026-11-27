@@ -2,7 +2,7 @@
 title: "Use PostgreSQL as the only database"
 description: "Replace file-backed storage with persistent local or managed PostgreSQL."
 id: 13
-status: "In progress"
+status: "Done"
 labels: []
 weight: 2
 references: {}
