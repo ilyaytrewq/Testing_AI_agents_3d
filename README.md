@@ -66,7 +66,7 @@ LLM_API_KEY=your-frontier-api-key
 
 После смены настроек выполните `docker compose -f compose.local.yaml up -d --wait`. При первом запуске или обновлении кода добавьте `--build`.
 
-**Переход со старой версии:** переименуйте ключ действующего сервиса в `LLM_API_KEY` в `.env` и Kubernetes Secret. Уберите старый переключатель `APP_LLM__PROVIDER` / `llm.provider`; для Google теперь используется совместимый `base_url`, а не нативный API. Обновите образ прежде, чем переключать Helm-релиз.
+**Переход со старой версии:** в `.env` переименуйте ключ действующего сервиса в `LLM_API_KEY`, в Kubernetes Secret добавьте его под новым именем. Уберите `APP_LLM__PROVIDER` / `llm.provider`; для Google теперь используется совместимый `base_url`. Для Compose пересоберите образ. Для Helm опубликуйте образ, который читает `LLM_API_KEY`, под новым уникальным тегом и укажите этот тег при обновлении чарта. Старый ключ в Secret можно сохранить до окончания проверки, чтобы не сломать откат.
 
 ## Развёртывание в Kubernetes
 
@@ -96,13 +96,14 @@ kubectl -n themed-chat port-forward svc/coffee-themed-chat 8000:8000
 [values.frontier.yaml](deploy/helm/values.frontier.yaml) задаёт адрес `https://klinskoe17.frontierai.ru/v1` и модель `glm-5.3-flash-cb` (GLM, не Qwen). Адрес самого чата (`publicOrigin`) не меняется.
 
 1. Добавьте **ключ Frontier AI** под именем `LLM_API_KEY` в существующий Kubernetes Secret, на который указывает `existingSecret`. Не заменяйте остальные ключи Secret и не передавайте токен в Helm values.
-2. Обновите существующий релиз. Подставьте имя релиза, namespace и контекст прод-кластера. Образ должен уже содержать OpenAI-совместимый адаптер (иначе добавьте `--set-string image.tag=...` с тегом обновлённого образа).
+2. Обновите существующий релиз. Укажите имя релиза, namespace, контекст прод-кластера и новый тег образа, который читает `LLM_API_KEY`. Одного наличия OpenAI-совместимого адаптера в старом образе недостаточно.
 
 ```sh
 helm upgrade "${RELEASE:?Укажите имя релиза}" ./deploy/helm/themed-chat \
   --kube-context "${PROD_CONTEXT:?Укажите контекст прод-кластера}" \
   --namespace "${NAMESPACE:?Укажите namespace}" \
   --reuse-values -f deploy/helm/values.frontier.yaml \
+  --set-string "image.tag=${IMAGE_TAG:?Укажите тег образа с LLM_API_KEY}" \
   --wait --timeout 5m
 ```
 
