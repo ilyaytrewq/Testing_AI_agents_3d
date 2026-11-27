@@ -2,7 +2,7 @@
 title: "Use one OpenAI-compatible LLM client"
 description: "Select a text model using base URL, model ID and one runtime key."
 id: 18
-status: "In progress"
+status: "Done"
 labels: []
 weight: 2
 references: {}
