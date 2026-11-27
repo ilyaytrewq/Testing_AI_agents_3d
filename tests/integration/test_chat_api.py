@@ -1,8 +1,9 @@
+import json
 from datetime import datetime
 from uuid import UUID
 
 import pytest
-from httpx import ASGITransport, AsyncClient
+from httpx import ASGITransport, AsyncClient, MockTransport, Request, Response
 from pydantic import SecretStr
 
 from themed_chat.app import create_app
@@ -97,3 +98,50 @@ async def test_authorized_guest_can_send_and_read_shared_history() -> None:
 def test_custom_guest_store_requires_matching_chat_store() -> None:
     with pytest.raises(ValueError, match="guest and chat repositories together"):
         create_app(guests=Guests(), generator=Generator())
+
+
+@pytest.mark.anyio
+async def test_app_selects_openai_compatible_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    def respond(request: Request) -> Response:
+        assert str(request.url) == "https://qwen.test/compatible-mode/v1/chat/completions"
+        assert request.headers["authorization"] == "Bearer qwen-fixture"
+        assert json.loads(request.content)["model"] == "qwen-plus"
+        return Response(200, json={"choices": [{"message": {"content": "Use a filter."}}]})
+
+    http = AsyncClient(transport=MockTransport(respond))
+    monkeypatch.setattr("themed_chat.adapters.openai_compatible.AsyncClient", lambda **_: http)
+    settings = Settings(
+        AppSettings(
+            llm=ModelSettings(
+                provider="openai_compatible",
+                base_url="https://qwen.test/compatible-mode/v1",
+                model="qwen-plus",
+                system_prompt="Coffee only",
+            )
+        ),
+        SecretSettings(
+            APP_ACCESS_KEY=SecretStr("chat_test_key"),
+            APP_SESSION_SECRET=SecretStr("chat-test-signing-secret-long-enough"),
+            OPENAI_COMPATIBLE_API_KEY=SecretStr("qwen-fixture"),
+            DATABASE_URL=SecretStr("postgresql+asyncpg://unused.test/chat"),
+        ),
+    )
+    app = create_app(settings, guests=Guests(), repository=Repository())
+    try:
+        async with (
+            app.router.lifespan_context(app),
+            AsyncClient(transport=ASGITransport(app), base_url=ORIGIN) as client,
+        ):
+            assert (await client.post("/api/session", headers=HEADERS)).status_code == 204
+            reply = await client.post(
+                "/api/messages", headers=HEADERS, json={"text": "How to brew?"}
+            )
+            assert reply.status_code == 201
+            history = await client.get("/api/messages")
+            assert [item["text"] for item in history.json()["messages"]] == [
+                "How to brew?",
+                "Use a filter.",
+            ]
+        assert http.is_closed
+    finally:
+        await http.aclose()

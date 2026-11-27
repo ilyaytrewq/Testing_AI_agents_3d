@@ -4,6 +4,10 @@ image:
   pullPolicy: IfNotPresent
 imagePullSecrets: []
 existingSecret: ""
+llm:
+  provider: gemini
+  model: ""
+  baseUrl: ""
 publicOrigin: http://127.0.0.1:8000
 # Optional Secret with a ca.crt key for a non-public PostgreSQL CA.
 postgresCASecret: ""

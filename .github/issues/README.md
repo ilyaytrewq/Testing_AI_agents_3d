@@ -22,3 +22,4 @@ references: {}
 - [#14 Consolidate local Docker Compose](0014-local-compose.md)
 - [#15 Deploy the chat with Helm](0015-helm-chart.md)
 - [#16 Consolidate project documentation](0016-consolidate-readme.md)
+- [#17 Support OpenAI-compatible text generation](0017-openai-compatible.md)

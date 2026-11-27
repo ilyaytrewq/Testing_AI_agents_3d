@@ -37,11 +37,33 @@ class ChatSettings(ConfigSection):
 
 
 class ModelSettings(ConfigSection):
-    provider: Literal["gemini"] = "gemini"
+    provider: Literal["gemini", "openai_compatible"] = "gemini"
+    base_url: str | None = None
     model: NonBlank
     system_prompt: NonBlank
     timeout_seconds: Annotated[float, Field(gt=0, le=120)] = 25.0
     max_output_tokens: Annotated[int, Field(gt=0, le=8192)] = 1024
+
+    @field_validator("base_url")
+    @classmethod
+    def validate_base_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if any(char.isspace() or char in "\\?#" for char in value):
+            raise ValueError("use a base URL without whitespace, a query, or a fragment")
+        url = AnyHttpUrl(value)
+        if url.username is not None or url.password is not None or not url.host:
+            raise ValueError("use an absolute HTTP(S) URL without credentials")
+        canonical = str(url).rstrip("/")
+        if canonical.endswith("/chat/completions"):
+            raise ValueError("specify the API base, not the chat completions endpoint")
+        return canonical
+
+    @model_validator(mode="after")
+    def require_compatible_url(self) -> Self:
+        if self.provider == "openai_compatible" and self.base_url is None:
+            raise ValueError("llm.base_url is required for openai_compatible")
+        return self
 
 
 class AuthSettings(ConfigSection):
@@ -104,13 +126,22 @@ def _apply_environment_overrides(raw: object) -> dict[str, object]:
     return values
 
 
-SECRET_NAMES = ("APP_ACCESS_KEY", "APP_SESSION_SECRET", "GEMINI_API_KEY", "DATABASE_URL")
+SECRET_NAMES = (
+    "APP_ACCESS_KEY",
+    "APP_SESSION_SECRET",
+    "GEMINI_API_KEY",
+    "OPENAI_COMPATIBLE_API_KEY",
+    "DATABASE_URL",
+)
 
 
 class SecretSettings(ConfigSection):
     access_key: SecretStr = Field(validation_alias="APP_ACCESS_KEY")
     session_secret: SecretStr = Field(validation_alias="APP_SESSION_SECRET")
-    gemini_api_key: SecretStr = Field(validation_alias="GEMINI_API_KEY")
+    gemini_api_key: SecretStr | None = Field(default=None, validation_alias="GEMINI_API_KEY")
+    openai_compatible_api_key: SecretStr | None = Field(
+        default=None, validation_alias="OPENAI_COMPATIBLE_API_KEY"
+    )
     database_url: SecretStr = Field(validation_alias="DATABASE_URL")
 
     @field_validator("access_key")
@@ -127,7 +158,7 @@ class SecretSettings(ConfigSection):
             raise ValueError("use at least 32 characters")
         return value
 
-    @field_validator("gemini_api_key", "database_url")
+    @field_validator("database_url")
     @classmethod
     def validate_nonblank_secret(cls, value: SecretStr) -> SecretStr:
         if not value.get_secret_value().strip():
@@ -145,6 +176,17 @@ class SecretSettings(ConfigSection):
 class Settings:
     app: AppSettings
     secrets: SecretSettings
+
+    def provider_api_key(self) -> SecretStr:
+        if self.app.llm.provider == "gemini":
+            key = self.secrets.gemini_api_key
+            name = "GEMINI_API_KEY"
+        else:
+            key = self.secrets.openai_compatible_api_key
+            name = "OPENAI_COMPATIBLE_API_KEY"
+        if key is None or not key.get_secret_value().strip():
+            raise ConfigurationError(f"Invalid or missing secrets: {name}.")
+        return key
 
 
 def load_settings(
@@ -189,4 +231,6 @@ def load_settings(
         raise ConfigurationError(f"Invalid or missing secrets: {detail}.") from None
     except (OSError, ValueError):
         raise ConfigurationError("Could not read the local secrets file.") from None
-    return Settings(app=app, secrets=secrets)
+    settings = Settings(app=app, secrets=secrets)
+    settings.provider_api_key()
+    return settings

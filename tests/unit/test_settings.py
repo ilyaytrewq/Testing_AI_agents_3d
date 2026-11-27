@@ -152,3 +152,77 @@ def test_rejected_yaml_values_are_not_logged(
     with caplog.at_level("DEBUG", logger="pydantic_settings"), pytest.raises(ConfigurationError):
         load_settings(config, env_file=None)
     assert marker not in caplog.text
+
+
+def test_openai_compatible_uses_its_own_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from themed_chat.settings import load_settings
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
+    config = tmp_path / "app.yaml"
+    config.write_text(
+        CONFIG + "  provider: openai_compatible\n  base_url: https://qwen.test/compatible-mode/v1\n"
+    )
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        DOTENV.replace(
+            "GEMINI_API_KEY=sample-provider-key", "OPENAI_COMPATIBLE_API_KEY=qwen-fixture"
+        )
+    )
+    settings = load_settings(config, env_file=env_file)
+    assert settings.app.llm.provider == "openai_compatible"
+    assert settings.app.llm.base_url == "https://qwen.test/compatible-mode/v1"
+    assert settings.provider_api_key().get_secret_value() == "qwen-fixture"
+
+
+@pytest.mark.parametrize("provider", ["gemini", "openai_compatible"])
+def test_selected_provider_requires_its_key(
+    provider: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from themed_chat.settings import ConfigurationError, load_settings
+
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_COMPATIBLE_API_KEY", raising=False)
+    config = tmp_path / "app.yaml"
+    config.write_text(
+        CONFIG + f"  provider: {provider}\n  base_url: https://provider.test/v1\n", encoding="utf-8"
+    )
+    key = {"gemini": "GEMINI_API_KEY", "openai_compatible": "OPENAI_COMPATIBLE_API_KEY"}[provider]
+    other = {"gemini": "OPENAI_COMPATIBLE_API_KEY", "openai_compatible": "GEMINI_API_KEY"}[provider]
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        DOTENV.replace("GEMINI_API_KEY=sample-provider-key\n", "") + f"{key}=\n{other}=unused\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ConfigurationError, match=key):
+        load_settings(config, env_file=env_file)
+
+
+@pytest.mark.parametrize(
+    "base_url",
+    [
+        None,
+        "file:///tmp/private",
+        "https://test:secret@host/v1",
+        "https://host/v1?key=secret",
+        "https://host/v1/chat/completions",
+    ],
+)
+def test_compatible_base_url_is_required_and_is_not_a_secret_or_an_operation(
+    base_url: str | None,
+) -> None:
+    from pydantic import ValidationError
+
+    from themed_chat.settings import ModelSettings
+
+    with pytest.raises(ValidationError) as error:
+        ModelSettings(
+            provider="openai_compatible",
+            base_url=base_url,
+            model="qwen-plus",
+            system_prompt="Coffee only",
+        )
+    assert "key=secret" not in str(error.value)
+    assert "test:secret" not in str(error.value)
