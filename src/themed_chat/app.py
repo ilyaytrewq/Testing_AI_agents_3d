@@ -3,6 +3,7 @@ from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from asyncpg import InterfaceError, InternalClientError, PostgresError
 from fastapi import FastAPI
@@ -85,6 +86,19 @@ def configure_logging() -> None:
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
+def log_model_targets(configuration: Settings) -> None:
+    """Name the hosts that receive API keys, so a key/URL mix-up shows at startup."""
+    llm = configuration.app.llm
+    logger.info("Model API: host=%s model=%s", urlsplit(llm.base_url).hostname, llm.model)
+    if configuration.app.guard.enabled:
+        classifier = configuration.classifier_model_settings
+        logger.info(
+            "Topic classifier API: host=%s model=%s",
+            urlsplit(classifier.base_url).hostname,
+            classifier.model,
+        )
+
+
 def create_app(settings: Settings | None = None, overrides: Overrides | None = None) -> FastAPI:
     configure_logging()
     configuration = settings if settings is not None else load_settings()
@@ -122,6 +136,7 @@ def create_app(settings: Settings | None = None, overrides: Overrides | None = N
             if overrides.generator is not None:
                 yield
             else:
+                log_model_targets(configuration)
                 async with AsyncExitStack() as clients:
                     generator = await clients.enter_async_context(
                         connect(configuration.app.llm, configuration.secrets.llm_api_key)

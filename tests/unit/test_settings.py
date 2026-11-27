@@ -263,6 +263,36 @@ def test_plain_http_base_url_is_allowed_only_for_loopback(base_url: str) -> None
     assert ModelSettings(base_url=base_url, model="m", system_prompt="p").base_url == base_url
 
 
+@pytest.mark.parametrize("variable", ["APP_LLM__BASE_URL", "APP_GUARD__CLASSIFIER_BASE_URL"])
+def test_plain_http_base_url_error_names_the_reason(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, variable: str
+) -> None:
+    from themed_chat.settings import ConfigurationError, load_app_settings
+
+    monkeypatch.setenv(variable, "http://llm.test/v1")
+    with pytest.raises(ConfigurationError, match="must use HTTPS") as error:
+        load_app_settings(write_config(tmp_path))
+    assert "llm.test" not in str(error.value)
+
+
+def test_startup_log_names_model_hosts_but_no_secret(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    from themed_chat.app import log_model_targets
+    from themed_chat.settings import load_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(DOTENV, encoding="utf-8")
+    for name in ("APP_LLM__BASE_URL", "APP_LLM__MODEL", "LLM_API_KEY", "APP_GUARD__ENABLED"):
+        monkeypatch.delenv(name, raising=False)
+    settings = load_settings(write_config(tmp_path), env_file=env_file)
+    with caplog.at_level("INFO", logger="themed_chat.app"):
+        log_model_targets(settings)
+    assert "Model API: host=llm.test model=fixture-model" in caplog.text
+    assert "Topic classifier API: host=llm.test" in caplog.text
+    assert "sample-provider-key" not in caplog.text
+
+
 @pytest.mark.parametrize(
     "extra", ["reasoning_effort: 2024-01-01", "temperature: .nan", "x: !!binary aGk="]
 )

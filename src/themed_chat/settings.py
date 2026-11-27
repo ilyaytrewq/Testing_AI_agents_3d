@@ -384,6 +384,12 @@ def load_app_settings(
         overrides = {**(file_values or {}), **environ}
         return AppSettings.model_validate(_apply_environment_overrides(yaml_values, overrides))
     except ValidationError as error:
+        url_fields = {("llm", "base_url"), ("guard", "classifier_base_url")}
+        if any(e["loc"] in url_fields and "HTTPS" in e["msg"] for e in error.errors()):
+            raise ConfigurationError(
+                "APP_LLM__BASE_URL and APP_GUARD__CLASSIFIER_BASE_URL must use HTTPS; "
+                "plain HTTP is allowed only for loopback hosts."
+            ) from None
         if any(e["loc"] in {("llm", "base_url"), ("llm", "model")} for e in error.errors()):
             raise ConfigurationError(
                 "Invalid or missing model settings. Set APP_LLM__BASE_URL and APP_LLM__MODEL."

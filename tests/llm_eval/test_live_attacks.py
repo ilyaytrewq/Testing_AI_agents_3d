@@ -61,7 +61,8 @@ ON_TOPIC = [
 
 @pytest.fixture
 def app_settings() -> AppSettings:
-    # The target must be explicit: a key must never go to the YAML default by accident.
+    # Target and key come only from the process environment, never from .env, so the key
+    # goes exactly where this run was told to send it.
     missing = [name for name in TARGET_VARIABLES if not environ.get(name, "").strip()]
     if missing:
         pytest.skip(f"Set {', '.join(missing)} explicitly to choose the API under test.")
