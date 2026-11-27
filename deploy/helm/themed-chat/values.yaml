@@ -9,6 +9,14 @@ llm:
   model: ""
   baseUrl: ""
 publicOrigin: http://127.0.0.1:8000
+# CIDR ranges of the ingress or load balancer whose X-Forwarded-For is trusted,
+# e.g. ["10.0.0.0/8"]. Empty: the TCP peer is the client.
+trustedProxies: []
+classifier:
+  # Optional OpenAI-compatible API for the topic classifier; empty: the main llm API.
+  baseUrl: ""
+  # true: existingSecret has CLASSIFIER_API_KEY (required when baseUrl is another host).
+  apiKeyInSecret: false
 # Optional Secret with a ca.crt key for a non-public PostgreSQL CA.
 postgresCASecret: ""
 resources:

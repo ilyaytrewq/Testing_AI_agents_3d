@@ -179,6 +179,7 @@ def test_generic_model_uses_the_same_secret_name_for_any_endpoint(
         "https://test:secret@host/v1",
         "https://host/v1?key=secret",
         "https://host/v1/chat/completions",
+        "http://llm.example.test/v1",
     ],
 )
 def test_compatible_base_url_is_required_and_is_not_a_secret_or_an_operation(
@@ -196,3 +197,264 @@ def test_compatible_base_url_is_required_and_is_not_a_secret_or_an_operation(
         )
     assert "key=secret" not in str(error.value)
     assert "test:secret" not in str(error.value)
+
+
+def test_config_file_can_be_chosen_with_an_environment_variable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from themed_chat.settings import load_settings
+
+    config = tmp_path / "elsewhere.yaml"
+    config.write_text(CONFIG, encoding="utf-8")
+    env_file = tmp_path / ".env"
+    env_file.write_text(DOTENV, encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("APP_CONFIG_FILE", str(config))
+    for name in ("APP_ACCESS_KEY", "APP_SESSION_SECRET", "LLM_API_KEY", "DATABASE_URL"):
+        monkeypatch.delenv(name, raising=False)
+    assert load_settings(env_file=env_file).app.llm.model == "fixture-model"
+    monkeypatch.delenv("APP_CONFIG_FILE")
+    from themed_chat.settings import ConfigurationError
+
+    with pytest.raises(ConfigurationError, match="configuration file"):
+        load_settings(env_file=env_file)  # The default config/app.yaml does not exist here.
+
+
+def test_rate_limits_have_defaults_and_can_be_overridden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from themed_chat.settings import load_settings
+
+    config = tmp_path / "app.yaml"
+    config.write_text(CONFIG, encoding="utf-8")
+    env_file = tmp_path / ".env"
+    env_file.write_text(DOTENV, encoding="utf-8")
+    monkeypatch.delenv("APP_AUTH__LOGIN_ATTEMPTS", raising=False)
+    defaults = load_settings(config, env_file=env_file).app
+    assert (defaults.auth.login_attempts, defaults.auth.login_window_seconds) == (10, 60)
+    assert (defaults.chat.message_limit, defaults.chat.message_window_seconds) == (10, 60)
+    monkeypatch.setenv("APP_AUTH__LOGIN_ATTEMPTS", "3")
+    monkeypatch.setenv("APP_CHAT__MESSAGE_LIMIT", "5")
+    configured = load_settings(config, env_file=env_file).app
+    assert (configured.auth.login_attempts, configured.chat.message_limit) == (3, 5)
+
+
+@pytest.mark.parametrize("base_url", ["http://127.0.0.1:11434/v1", "http://localhost:8080/v1"])
+def test_plain_http_base_url_is_allowed_only_for_loopback(base_url: str) -> None:
+    from themed_chat.settings import ModelSettings
+
+    assert ModelSettings(base_url=base_url, model="m", system_prompt="p").base_url == base_url
+
+
+@pytest.mark.parametrize(
+    "extra", ["reasoning_effort: 2024-01-01", "temperature: .nan", "x: !!binary aGk="]
+)
+@pytest.mark.parametrize("section", ["llm", "guard"])
+def test_extra_body_must_be_json_safe(tmp_path: Path, section: str, extra: str) -> None:
+    from themed_chat.settings import ConfigurationError, load_app_settings
+
+    field = "extra_body" if section == "llm" else "classifier_extra_body"
+    config = tmp_path / "app.yaml"
+    body = CONFIG + ("\nguard:\n" if section == "guard" else "")
+    if section == "llm":
+        body = body.replace("llm:\n", f"llm:\n  {field}:\n    {extra}\n", 1)
+    else:
+        body += f"  {field}:\n    {extra}\n"
+    config.write_text(body, encoding="utf-8")
+    with pytest.raises(ConfigurationError):
+        load_app_settings(config)
+
+
+def test_valid_extra_body_loads(tmp_path: Path) -> None:
+    from themed_chat.settings import load_app_settings
+
+    config = tmp_path / "app.yaml"
+    config.write_text(
+        CONFIG + "\nguard:\n  classifier_extra_body:\n    reasoning_effort: low\n",
+        encoding="utf-8",
+    )
+    assert load_app_settings(config).guard.classifier_extra_body == {"reasoning_effort": "low"}
+
+
+SECRET_VARIABLES = (
+    "APP_ACCESS_KEY",
+    "APP_SESSION_SECRET",
+    "LLM_API_KEY",
+    "CLASSIFIER_API_KEY",
+    "DATABASE_URL",
+)
+
+
+@pytest.fixture
+def clean_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
+    for name in SECRET_VARIABLES:
+        monkeypatch.delenv(name, raising=False)
+        monkeypatch.delenv(f"{name}_FILE", raising=False)
+
+
+def write_config(tmp_path: Path, extra: str = "") -> Path:
+    config = tmp_path / "app.yaml"
+    config.write_text(CONFIG + extra, encoding="utf-8")
+    return config
+
+
+@pytest.mark.usefixtures("clean_secrets")
+def test_secrets_can_come_from_files(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from themed_chat.settings import load_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(DOTENV.replace("LLM_API_KEY=", "UNUSED="), encoding="utf-8")
+    key_file = tmp_path / "LLM_API_KEY"
+    key_file.write_text("file-provider-key\n", encoding="utf-8")
+    monkeypatch.setenv("LLM_API_KEY_FILE", str(key_file))
+    settings = load_settings(write_config(tmp_path), env_file=env_file)
+    # One trailing newline is removed; the rest of the value is kept as is.
+    assert settings.secrets.llm_api_key.get_secret_value() == "file-provider-key"
+
+
+@pytest.mark.usefixtures("clean_secrets")
+def test_a_secret_and_its_file_together_are_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from themed_chat.settings import ConfigurationError, load_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(DOTENV, encoding="utf-8")
+    key_file = tmp_path / "key"
+    key_file.write_text("file-provider-key", encoding="utf-8")
+    monkeypatch.setenv("LLM_API_KEY_FILE", str(key_file))
+    with pytest.raises(ConfigurationError, match="LLM_API_KEY or LLM_API_KEY_FILE"):
+        load_settings(write_config(tmp_path), env_file=env_file)
+    monkeypatch.setenv("LLM_API_KEY_FILE", str(tmp_path / "missing"))
+    env_file.write_text(DOTENV.replace("LLM_API_KEY=", "UNUSED="), encoding="utf-8")
+    with pytest.raises(ConfigurationError, match="LLM_API_KEY_FILE") as caught:
+        load_settings(write_config(tmp_path), env_file=env_file)
+    assert str(tmp_path) not in str(caught.value)
+
+
+CLASSIFIER_ON_OTHER_HOST = """
+guard:
+  classifier_base_url: https://classifier.test/v1
+"""
+
+
+@pytest.mark.usefixtures("clean_secrets")
+def test_classifier_on_another_host_needs_its_own_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from themed_chat.settings import ConfigurationError, load_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(DOTENV, encoding="utf-8")
+    config = write_config(tmp_path, CLASSIFIER_ON_OTHER_HOST)
+    with pytest.raises(ConfigurationError, match="CLASSIFIER_API_KEY"):
+        load_settings(config, env_file=env_file)
+    monkeypatch.setenv("CLASSIFIER_API_KEY", "classifier-key")
+    settings = load_settings(config, env_file=env_file)
+    assert settings.classifier_api_key.get_secret_value() == "classifier-key"
+    assert settings.classifier_model_settings.base_url == "https://classifier.test/v1"
+    assert settings.classifier_model_settings.model == "fixture-model"
+
+
+@pytest.mark.usefixtures("clean_secrets")
+def test_classifier_on_the_same_host_reuses_the_main_key(tmp_path: Path) -> None:
+    from themed_chat.settings import load_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(DOTENV, encoding="utf-8")
+    settings = load_settings(
+        write_config(tmp_path, "\nguard:\n  classifier_base_url: https://llm.test/other/v1\n"),
+        env_file=env_file,
+    )
+    assert settings.classifier_api_key == settings.secrets.llm_api_key
+    assert load_settings(write_config(tmp_path), env_file=env_file).classifier_model_settings == (
+        settings.app.llm.model_copy(update={"timeout_seconds": 10.0})
+    )
+
+
+@pytest.mark.parametrize("url", ["http://classifier.test/v1", "https://u:p@classifier.test/v1"])
+def test_classifier_base_url_follows_the_same_rules(url: str) -> None:
+    from pydantic import ValidationError
+
+    from themed_chat.settings import GuardSettings
+
+    with pytest.raises(ValidationError):
+        GuardSettings(classifier_base_url=url)
+    assert GuardSettings(classifier_base_url="http://127.0.0.1:9000/v1").classifier_base_url
+
+
+def test_trusted_proxies_parse_from_yaml_and_environment() -> None:
+    from ipaddress import ip_network
+
+    from pydantic import ValidationError
+
+    from themed_chat.settings import AuthSettings
+
+    assert AuthSettings().trusted_proxies == ()
+    expected = (ip_network("10.0.0.0/8"), ip_network("fd00::/8"))
+    assert AuthSettings(trusted_proxies=["10.0.0.0/8", "fd00::/8"]).trusted_proxies == expected
+    assert AuthSettings(trusted_proxies='["10.0.0.0/8", "fd00::/8"]').trusted_proxies == expected
+    assert AuthSettings(trusted_proxies="10.0.0.0/8, fd00::/8").trusted_proxies == expected
+    for bad in ("10.0.0.1/8", "not-an-ip", "[1]"):
+        with pytest.raises(ValidationError):
+            AuthSettings(trusted_proxies=bad)
+
+
+def test_unknown_provider_is_a_configuration_error() -> None:
+    from support import make_settings
+
+    from themed_chat.adapters.providers import PROVIDERS
+    from themed_chat.app import create_app
+    from themed_chat.settings import ConfigurationError, ModelSettings
+
+    assert list(PROVIDERS) == ["openai_compatible"]
+    llm = ModelSettings(
+        provider="nonexistent", base_url="https://llm.test/v1", model="m", system_prompt="p"
+    )
+    with pytest.raises(ConfigurationError, match="llm.provider"):
+        create_app(make_settings(llm=llm))
+
+
+@pytest.mark.usefixtures("clean_secrets")
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_blank_secret_next_to_its_file_is_ignored(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, blank: str
+) -> None:
+    from themed_chat.settings import load_settings
+
+    env_file = tmp_path / ".env"
+    # As written by `make env`: LLM_API_KEY= stays empty.
+    env_file.write_text(
+        DOTENV.replace("LLM_API_KEY=sample-provider-key", f"LLM_API_KEY={blank}"),
+        encoding="utf-8",
+    )
+    key_file = tmp_path / "key"
+    key_file.write_text("file-provider-key\n", encoding="utf-8")
+    monkeypatch.setenv("LLM_API_KEY_FILE", str(key_file))
+    settings = load_settings(write_config(tmp_path), env_file=env_file)
+    assert settings.secrets.llm_api_key.get_secret_value() == "file-provider-key"
+
+
+@pytest.mark.usefixtures("clean_secrets")
+@pytest.mark.parametrize(
+    "url", ["http://127.0.0.1:9000/v1", "https://llm.test:8443/v1", "https://LLM.test/other"]
+)
+def test_main_key_goes_only_to_the_same_origin(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    from themed_chat.settings import ConfigurationError, load_settings
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(DOTENV, encoding="utf-8")
+    config = write_config(tmp_path, f"\nguard:\n  classifier_base_url: {url}\n")
+    if url == "https://LLM.test/other":
+        # Same scheme, host (case-insensitive) and default port: the main key is reused.
+        settings = load_settings(config, env_file=env_file)
+        assert settings.classifier_api_key == settings.secrets.llm_api_key
+        return
+    with pytest.raises(ConfigurationError, match="CLASSIFIER_API_KEY"):
+        load_settings(config, env_file=env_file)
+    monkeypatch.setenv("CLASSIFIER_API_KEY", "classifier-key")
+    assert load_settings(config, env_file=env_file).classifier_api_key.get_secret_value() == (
+        "classifier-key"
+    )

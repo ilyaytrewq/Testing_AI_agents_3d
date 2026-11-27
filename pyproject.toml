@@ -13,7 +13,6 @@ dependencies = [
     "fastapi>=0.115,<1",
     "httpx>=0.28,<1",
     "itsdangerous>=2.2,<3",
-    "openai>=2,<3",
     "pydantic>=2.11,<3",
     "python-dotenv>=1,<2",
     "pyyaml>=6,<7",
@@ -36,8 +35,10 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-addopts = ["--import-mode=importlib", "--strict-markers"]
+addopts = ["--import-mode=importlib", "--strict-markers", "-m", "not llm_eval"]
+markers = ["llm_eval: attacks against the real model; needs LLM_API_KEY, run manually"]
 testpaths = ["tests/unit", "tests/integration"]
+pythonpath = ["tests"]
 
 [tool.ruff]
 target-version = "py313"

@@ -3,15 +3,19 @@ services:
     build: .
     env_file: .env
     environment:
-      APP_LOCAL_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env for local PostgreSQL}
+      # The password must be URL-safe: use hex (openssl rand -hex 32), as `make env` does.
+      DATABASE_URL: postgresql+asyncpg://themed_chat:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env for local PostgreSQL}@postgres:5432/themed_chat?ssl=disable
       APP_AUTH__PUBLIC_ORIGIN: ${APP_AUTH__PUBLIC_ORIGIN:-http://127.0.0.1:${CHAT_PORT:-8000}}
+    volumes:
+      # Theme and prompt edits in config/app.yaml need a restart, not a rebuild.
+      - ./config:/app/config:ro
     ports:
       - "127.0.0.1:${CHAT_PORT:-8000}:8000"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/healthz', timeout=2).close()"]
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/readyz', timeout=2).close()"]
       interval: 5s
       timeout: 3s
       retries: 10

@@ -6,6 +6,10 @@
 {{- if ne (empty $model) (empty $baseURL) -}}
 {{- fail "llm.model and llm.baseUrl must be set together" -}}
 {{- end -}}
+{{- $secretKeys := list "APP_ACCESS_KEY" "APP_SESSION_SECRET" "DATABASE_URL" "LLM_API_KEY" -}}
+{{- if .Values.classifier.apiKeyInSecret -}}
+{{- $secretKeys = append $secretKeys "CLASSIFIER_API_KEY" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -29,6 +33,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 10001
         runAsGroup: 10001
+        # The secret files belong to this group, so the app user can read them.
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
       {{- with .Values.imagePullSecrets }}
@@ -56,12 +62,18 @@ spec:
             - name: APP_LLM__BASE_URL
               value: {{ $baseURL | quote }}
             {{- end }}
-            {{- range list "APP_ACCESS_KEY" "APP_SESSION_SECRET" "DATABASE_URL" "LLM_API_KEY" }}
-            - name: {{ . }}
-              valueFrom:
-                secretKeyRef:
-                  name: {{ $secret | quote }}
-                  key: {{ . }}
+            {{- with .Values.classifier.baseUrl }}
+            - name: APP_GUARD__CLASSIFIER_BASE_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.trustedProxies }}
+            - name: APP_AUTH__TRUSTED_PROXIES
+              value: {{ toJson . | quote }}
+            {{- end }}
+            # Secrets are files on a read-only volume, not environment values.
+            {{- range $secretKeys }}
+            - name: {{ . }}_FILE
+              value: /run/secrets/themed-chat/{{ . }}
             {{- end }}
             - name: PGSSLROOTCERT
               {{- if .Values.postgresCASecret }}
@@ -70,25 +82,37 @@ spec:
               value: /etc/ssl/certs/ca-certificates.crt
               {{- end }}
           startupProbe:
-            httpGet: { path: /healthz, port: http }
+            httpGet: { path: /readyz, port: http }
             periodSeconds: 2
             failureThreshold: 60
           readinessProbe:
-            httpGet: { path: /healthz, port: http }
+            httpGet: { path: /readyz, port: http }
             periodSeconds: 5
           livenessProbe:
             httpGet: { path: /healthz, port: http }
             periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- if .Values.postgresCASecret }}
           volumeMounts:
+            - name: runtime-secrets
+              mountPath: /run/secrets/themed-chat
+              readOnly: true
+          {{- if .Values.postgresCASecret }}
             - name: postgres-ca
               mountPath: /etc/postgres-ca
               readOnly: true
           {{- end }}
-      {{- if .Values.postgresCASecret }}
       volumes:
+        - name: runtime-secrets
+          secret:
+            secretName: {{ $secret | quote }}
+            defaultMode: 0440
+            items:
+              {{- range $secretKeys }}
+              - key: {{ . }}
+                path: {{ . }}
+              {{- end }}
+      {{- if .Values.postgresCASecret }}
         - name: postgres-ca
           secret:
             secretName: {{ .Values.postgresCASecret | quote }}

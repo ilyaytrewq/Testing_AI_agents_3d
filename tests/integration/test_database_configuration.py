@@ -19,7 +19,6 @@ from themed_chat.settings import (
 @pytest.fixture
 def deployment_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.delenv("DATABASE_URL", raising=False)
-    monkeypatch.delenv("APP_LOCAL_POSTGRES_PASSWORD", raising=False)
     for name, value in {
         "APP_ACCESS_KEY": "compose_fixture_key",
         "APP_SESSION_SECRET": "test-database-signing-secret-not-production",
@@ -45,28 +44,6 @@ async def test_reads_postgresql_dsn_from_dotenv(cloud_env: Path) -> None:
         assert engine.url.host == "database.test"
     finally:
         await engine.dispose()
-
-
-@pytest.mark.anyio
-async def test_local_compose_encodes_password_in_postgresql_dsn(
-    deployment_env: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("APP_LOCAL_POSTGRES_PASSWORD", "a@b:/c#d%")
-    engine = create_database_engine(load_settings(env_file=deployment_env))
-    try:
-        assert engine.url.host == "postgres"
-        assert engine.url.password == "a@b:/c#d%"
-        assert engine.url.query["ssl"] == "disable"
-    finally:
-        await engine.dispose()
-
-
-def test_local_compose_rejects_external_dsn_instead_of_overriding_it(
-    cloud_env: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("APP_LOCAL_POSTGRES_PASSWORD", "local-fixture")
-    with pytest.raises(ConfigurationError, match="DATABASE_URL.*local PostgreSQL"):
-        load_settings(env_file=cloud_env)
 
 
 def test_application_requires_postgresql_dsn_even_with_a_legacy_file_path(
@@ -119,3 +96,46 @@ async def test_startup_does_not_echo_raw_database_failure(monkeypatch: pytest.Mo
         async with app.router.lifespan_context(app):
             pytest.fail("Startup should have been aborted.")
     assert "test-private-marker" not in "".join(traceback.format_exception(caught.value))
+
+
+@pytest.mark.anyio
+async def test_unreachable_database_is_service_unavailable() -> None:
+    from httpx import ASGITransport, AsyncClient
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from support import LOGIN, ORIGIN, WRITE, MemoryStorage, StubGenerator, make_settings
+
+    from themed_chat.adapters.sql_repository import (
+        SqlChatRepository,
+        SqlGuestRepository,
+        SqlSessionRepository,
+    )
+    from themed_chat.app import Overrides, Storage
+
+    # Port 1 on loopback refuses connections: asyncpg raises outside SQLAlchemy's wrapping.
+    settings = make_settings(database_url="postgresql+asyncpg://test:secret@127.0.0.1:1/x")
+    engine = create_database_engine(settings)
+    sessions = async_sessionmaker(engine)
+    try:
+        down = Storage(
+            SqlGuestRepository(sessions),
+            SqlChatRepository(sessions),
+            SqlSessionRepository(sessions),
+        )
+        memory = MemoryStorage()
+        guests_up = Storage(memory, SqlChatRepository(sessions), memory)
+        for storage, checks in ((down, ["login"]), (guests_up, ["read", "send"])):
+            app = create_app(settings, Overrides(storage, StubGenerator()))
+            transport = ASGITransport(app, raise_app_exceptions=False)
+            async with AsyncClient(transport=transport, base_url=ORIGIN) as client:
+                login = await client.post("/api/session", headers=LOGIN)
+                responses = {"login": login}
+                if "read" in checks:
+                    responses["read"] = await client.get("/api/messages")
+                    responses["send"] = await client.post(
+                        "/api/messages", headers=WRITE, json={"text": "кофе"}
+                    )
+                for name in checks:
+                    assert responses[name].status_code == 503, name
+                    assert responses[name].json() == {"error": {"code": "service_unavailable"}}
+    finally:
+        await engine.dispose()

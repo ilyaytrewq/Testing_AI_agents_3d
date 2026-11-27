@@ -1,196 +1,314 @@
+import * as api from "./api.js";
+import { Transcript } from "./transcript.js";
+
 const byId = (id) => document.getElementById(id);
 const start = byId("start");
 const login = byId("login");
 const chat = byId("chat");
 const key = byId("access-key");
+const keyError = byId("login-error");
 const enter = byId("login-button");
+const form = byId("message-form");
 const input = byId("message-input");
 const send = byId("send-button");
-const history = byId("messages");
+const messageError = byId("message-error");
+const chatError = byId("chat-error");
+const logoutButton = byId("logout");
+const loadEarlier = byId("load-earlier");
 const retry = byId("retry");
-const recovery = byId("recovery");
-const refreshHistory = byId("refresh-history");
-const allowNewSend = byId("allow-new-send");
-const maximum = 500;
-const keyPattern = /^[A-Za-z0-9_-]{8,255}$/;
-const dateFormat = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "short" });
+const transcript = new Transcript({
+  scroller: byId("transcript"),
+  list: byId("messages"),
+  pending: byId("pending"),
+  empty: byId("empty"),
+  loadEarlier,
+});
+
+const MAX_LENGTH = 500;
+const REFRESH_INTERVAL_MS = 15000;
+const SESSION_EXPIRED = "Сессия истекла. Войдите снова.";
 let entering = false;
 let sending = false;
-let uncertainText = null;
-let historyChecked = false;
+let refreshing = false;
+// Text of a send that hit an expired session; restored after the next login. Memory only.
+let unsentText = "";
+// Polling cursor: every turn written after this revision is still to be fetched.
+let revision = 0;
 
 function show(section) {
   for (const panel of [start, login, chat]) panel.hidden = panel !== section;
 }
 
-function updateLogin() {
-  enter.disabled = entering || !keyPattern.test(key.value);
-}
+// ---- Login ----
 
-function updateComposer() {
-  const size = [...input.value].length;
-  byId("message-count").textContent = `${size} / ${maximum}`;
-  byId("message-count").classList.toggle("over", size > maximum);
-  const blank = /^[\p{White_Space}\u001c-\u001f]*$/u.test(input.value);
-  send.disabled = sending || blank || size > maximum || (
-    uncertainText !== null && (!historyChecked || input.value === uncertainText)
-  );
-}
-
-function appendMessages(messages) {
-  for (const message of messages) {
-    const item = document.createElement("li");
-    item.className = message.is_mine ? "message mine" : "message";
-    const meta = document.createElement("div");
-    meta.className = "message-meta";
-    const author = document.createElement("strong");
-    author.textContent = message.role === "assistant" ? "Ассистент" : message.is_mine ? "Вы" : "Гость";
-    const time = document.createElement("time");
-    time.dateTime = message.created_at;
-    time.textContent = dateFormat.format(new Date(message.created_at));
-    meta.append(author, time);
-    const body = document.createElement("p");
-    body.className = "message-body";
-    body.textContent = message.text;
-    item.append(meta, body);
-    history.append(item);
+function keyProblem(value) {
+  if (!/^[A-Za-z0-9_-]*$/.test(value)) {
+    return "Ключ может содержать только латинские буквы, цифры, дефис и подчёркивание.";
   }
-  byId("empty").hidden = history.children.length !== 0;
+  if (value.length > 0 && value.length < 8) {
+    return `Ключ слишком короткий: нужно не меньше 8 символов, сейчас ${value.length}.`;
+  }
+  if (value.length > 255) {
+    return `Ключ слишком длинный: можно не больше 255 символов, сейчас ${value.length}.`;
+  }
+  return "";
+}
+
+function updateLoginButton() {
+  enter.disabled = entering || key.value === "" || keyProblem(key.value) !== "";
+}
+
+function onKeyInput() {
+  const problem = keyProblem(key.value);
+  keyError.textContent = problem;
+  key.setAttribute("aria-invalid", String(problem !== ""));
+  updateLoginButton();
 }
 
 function showLogin(message = "") {
   show(login);
-  byId("login-error").textContent = message;
+  keyError.textContent = message;
   key.focus();
 }
 
-function scrollToLatest() {
-  const transcript = byId("transcript");
-  transcript.scrollTop = transcript.scrollHeight;
+/** Leave the chat (logged out or session lost) and go back to the login screen. */
+function endSession(message = "") {
+  transcript.clear();
+  revision = 0;
+  input.value = "";
+  chatError.textContent = "";
+  updateComposer();
+  showLogin(message);
 }
+
+// ---- Composer ----
+
+function updateComposer() {
+  const size = [...input.value].length; // Code points, like the server counts them.
+  const tooLong = size > MAX_LENGTH;
+  const blank = /^[\p{White_Space}\u001c-\u001f]*$/u.test(input.value);
+  byId("message-count").textContent = `${size} / ${MAX_LENGTH}`;
+  byId("message-count").classList.toggle("over", tooLong);
+  messageError.textContent = tooLong
+    ? `Сообщение длиннее ${MAX_LENGTH} символов: сократите его на ${size - MAX_LENGTH}.`
+    : "";
+  input.setAttribute("aria-invalid", String(tooLong));
+  send.disabled = sending || blank || tooLong;
+}
+
+function restoreInput(text) {
+  if (input.value === "") input.value = text;
+  updateComposer();
+}
+
+// ---- Loading history ----
 
 async function loadHistory() {
   retry.hidden = true;
   byId("start-status").textContent = "Загружаем сообщения…";
   show(start);
   try {
-    const response = await fetch("./api/messages", { cache: "no-store" });
-    if (response.status === 401) {
+    const data = await api.loadMessages();
+    byId("title").textContent = data.title;
+    document.title = data.title;
+    transcript.reset(data.messages, data.has_more);
+    revision = data.revision;
+    show(chat);
+    if (unsentText !== "") restoreInput(unsentText);
+    unsentText = "";
+    updateComposer();
+    input.focus();
+  } catch (error) {
+    if (error instanceof api.ApiError && error.status === 401) {
       showLogin();
       return;
     }
-    if (!response.ok) throw new Error("Unable to load chat");
-    const data = await response.json();
-    byId("title").textContent = data.title;
-    document.title = data.title;
-    history.replaceChildren();
-    appendMessages(data.messages);
-    show(chat);
-    if (uncertainText !== null) {
-      historyChecked = true;
-      allowNewSend.hidden = false;
-      byId("chat-error").textContent = "История обновлена. Проверьте, появился ли ваш вопрос.";
-    }
-    updateComposer();
-    scrollToLatest();
-    input.focus();
-  } catch {
-    byId("start-status").textContent = "Не удалось загрузить историю.";
+    byId("start-status").textContent = `Не удалось загрузить историю. ${api.describeError(error)}`;
     retry.hidden = false;
     retry.focus();
   }
 }
 
-key.addEventListener("input", updateLogin);
+/** Fetch every turn written after revision `from`, and the cursor after them. */
+async function loadChanges(from) {
+  const messages = [];
+  let after = from;
+  for (;;) {
+    const data = await api.loadMessages({ after_revision: after, limit: 100 });
+    messages.push(...data.messages);
+    after = data.revision;
+    if (!data.has_more || data.messages.length === 0) return { messages, revision: after };
+  }
+}
+
+/** Show turns written after `from` and move the cursor past them. */
+async function catchUp(from) {
+  const changes = await loadChanges(from);
+  transcript.append(changes.messages, { follow: true });
+  revision = Math.max(revision, changes.revision);
+  return changes.messages;
+}
+
+/** Pick up messages that other participants wrote. */
+async function refreshNew() {
+  if (refreshing || sending || chat.hidden) return;
+  refreshing = true;
+  try {
+    const changes = await loadChanges(revision);
+    // While a send is in flight it catches up from its own cursor afterwards.
+    if (!sending && !chat.hidden) {
+      transcript.append(changes.messages);
+      revision = Math.max(revision, changes.revision);
+    }
+  } catch (error) {
+    if (error instanceof api.ApiError && error.status === 401) expireSession();
+    // Other failures are retried at the next tick.
+  } finally {
+    refreshing = false;
+  }
+}
+
+async function showEarlier() {
+  loadEarlier.disabled = true;
+  chatError.textContent = "";
+  try {
+    const data = await api.loadMessages({ before: transcript.oldestTurnId });
+    transcript.prepend(data.messages, data.has_more);
+  } catch (error) {
+    if (error instanceof api.ApiError && error.status === 401) expireSession();
+    else chatError.textContent = api.describeError(error);
+  } finally {
+    loadEarlier.disabled = false;
+  }
+}
+
+// ---- Sending ----
+
+async function submitMessage() {
+  if (send.disabled) return;
+  const text = input.value;
+  const cursor = revision;
+  transcript.clearPending();
+  const pending = transcript.addPending(text);
+  input.value = "";
+  sending = true;
+  updateComposer();
+  chatError.textContent = "";
+  byId("chat-status").textContent = "Ассистент готовит ответ…";
+  try {
+    const data = await api.sendMessage(text);
+    pending.remove();
+    // Our turn goes in at once; the cursor only moves by polling, so turns that others
+    // wrote while we waited still come with the catch-up below or the next refresh.
+    transcript.append(data.messages, { follow: true });
+    try {
+      await catchUp(cursor);
+    } catch {
+      // The next refresh starts from the same cursor.
+    }
+  } catch (error) {
+    await handleSendFailure(error, text, cursor, pending);
+  } finally {
+    sending = false;
+    byId("chat-status").textContent = "";
+    updateComposer();
+    if (!chat.hidden) input.focus();
+  }
+}
+
+/** Keep the sent question and any follow-up draft typed meanwhile (memory only). */
+function expireDuringSend(text) {
+  const draft = input.value;
+  unsentText = draft.trim() !== "" ? `${text}\n\n${draft}` : text;
+  expireSession();
+}
+
+/** The session ended on its own: keep the unsent text (memory only) for the next login. */
+function expireSession() {
+  if (unsentText === "" && input.value.trim() !== "") unsentText = input.value;
+  endSession(SESSION_EXPIRED);
+}
+
+async function handleSendFailure(error, text, cursor, pending) {
+  if (error instanceof api.ApiError && error.status === 401) {
+    expireDuringSend(text);
+    return;
+  }
+  // A model failure (502/504) is saved as an unanswered turn; after a lost response the
+  // turn may be saved too. The server copy, if any, replaces the pending entry.
+  let stored = null;
+  try {
+    const messages = await catchUp(cursor);
+    stored = messages.find((m) => m.role === "user" && m.is_mine && m.text === text) ?? null;
+  } catch (recoveryError) {
+    if (recoveryError instanceof api.ApiError && recoveryError.status === 401) {
+      expireDuringSend(text);
+      return;
+    }
+  }
+  if (stored?.status === "answered") return; // The reply was lost on the way, not the turn.
+  if (stored === null) pending.fail();
+  restoreInput(text);
+  chatError.textContent = error instanceof api.ApiError
+    ? api.describeError(error)
+    : "Не удалось отправить сообщение: нет подтверждения от сервера. "
+      + "Проверьте соединение и попробуйте ещё раз.";
+}
+
+// ---- Events ----
+
+key.addEventListener("input", onKeyInput);
 input.addEventListener("input", updateComposer);
 retry.addEventListener("click", loadHistory);
-refreshHistory.addEventListener("click", loadHistory);
-allowNewSend.addEventListener("click", () => {
-  uncertainText = null;
-  recovery.hidden = true;
-  byId("chat-error").textContent = "";
-  updateComposer();
-  input.focus();
+loadEarlier.addEventListener("click", showEarlier);
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  submitMessage();
+});
+input.addEventListener("keydown", (event) => {
+  // Enter sends, Shift+Enter inserts a newline; Enter that confirms IME composition is ignored.
+  if (event.key !== "Enter" || event.shiftKey || event.isComposing || event.keyCode === 229) return;
+  event.preventDefault();
+  form.requestSubmit();
 });
 byId("login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (enter.disabled) return;
   entering = true;
-  updateLogin();
-  byId("login-error").textContent = "";
+  updateLoginButton();
+  keyError.textContent = "";
   try {
-    const response = await fetch("./api/session", {
-      method: "POST", headers: { "X-Access-Key": key.value },
-    });
-    if (response.status === 401) {
-      showLogin("Неверный ключ доступа.");
-      return;
-    }
-    if (!response.ok) throw new Error("Unable to start session");
-    key.value = "";
-    await loadHistory();
-  } catch {
-    showLogin("Не удалось войти. Попробуйте ещё раз.");
+    await api.login(key.value);
+  } catch (error) {
+    showLogin(api.describeError(error, "login"));
+    key.setAttribute("aria-invalid", String(error instanceof api.ApiError && error.status === 401));
+    return;
   } finally {
     entering = false;
-    updateLogin();
+    updateLoginButton();
   }
+  key.value = "";
+  key.setAttribute("aria-invalid", "false");
+  updateLoginButton();
+  await loadHistory();
 });
-
-byId("message-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  if (send.disabled) return;
-  const text = input.value;
-  uncertainText = null;
-  recovery.hidden = true;
-  sending = true;
-  updateComposer();
-  byId("chat-error").textContent = "";
-  byId("chat-status").textContent = "Ассистент готовит ответ…";
+logoutButton.addEventListener("click", async () => {
+  logoutButton.disabled = true;
   try {
-    const response = await fetch("./api/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-    if (response.status === 401) {
-      showLogin("Сессия истекла. Войдите снова.");
-      return;
-    }
-    if (!response.ok) {
-      const failure = await response.json().catch(() => null);
-      if (response.status === 504 && failure?.detail === "model_timeout") {
-        byId("chat-error").textContent = "Ассистент не успел ответить. Попробуйте ещё раз.";
-        return;
-      }
-      if (response.status === 502 && failure?.detail === "model_unavailable") {
-        byId("chat-error").textContent = "Не удалось получить ответ. Попробуйте ещё раз.";
-        return;
-      }
-      if (response.status === 422) {
-        byId("chat-error").textContent = "Проверьте текст сообщения.";
-        return;
-      }
-      throw new Error("Unable to confirm message delivery");
-    }
-    const data = await response.json();
-    appendMessages(data.messages);
-    if (input.value === text) input.value = "";
-    scrollToLatest();
-    input.focus();
-  } catch {
-    uncertainText = text;
-    historyChecked = false;
-    allowNewSend.hidden = true;
-    recovery.hidden = false;
-    byId("chat-error").textContent = "Не удалось подтвердить отправку. Сначала сверьтесь с историей.";
-    if (document.activeElement === document.body) refreshHistory.focus();
+    await api.logout();
+    unsentText = "";
+    endSession();
+  } catch (error) {
+    chatError.textContent = `Не удалось выйти. ${api.describeError(error)}`;
   } finally {
-    sending = false;
-    byId("chat-status").textContent = "";
-    updateComposer();
-    if (!chat.hidden && document.activeElement === document.body) input.focus();
+    logoutButton.disabled = false;
   }
 });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") refreshNew();
+});
+setInterval(() => {
+  if (document.visibilityState === "visible") refreshNew();
+}, REFRESH_INTERVAL_MS);
 
 loadHistory();

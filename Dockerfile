@@ -13,4 +13,4 @@ RUN uv sync --locked --no-dev --no-editable
 
 USER 10001:10001
 EXPOSE 8000
-CMD ["uvicorn", "themed_chat.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--ws", "none"]
+CMD ["uvicorn", "themed_chat.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--ws", "none", "--no-server-header"]

@@ -46,7 +46,10 @@ async def test_guest_survives_application_restart(postgres_dsn: SecretStr) -> No
         second.router.lifespan_context(second),
         AsyncClient(transport=ASGITransport(second), base_url=ORIGIN, cookies=cookies) as browser,
     ):
-        assert (await browser.get("/api/session")).status_code == 204
+        assert (await browser.get("/api/messages")).status_code == 200
+        assert (await browser.post("/api/session", headers=headers)).status_code == 204
+        # A later login, even without the session cookie, finds the same guest again.
+        await browser.delete("/api/session", headers={"Origin": ORIGIN})
         assert (await browser.post("/api/session", headers=headers)).status_code == 204
 
     engine = create_async_engine(postgres_dsn.get_secret_value())
@@ -78,7 +81,7 @@ async def test_interrupted_migration_rolls_back_before_retry(postgres_dsn: Secre
         await migrate_database(engine)
         async with engine.connect() as connection:
             version = await connection.scalar(text("SELECT version_num FROM alembic_version"))
-        assert version == "0002_chat_turns"
+        assert version == "0003_status_sessions"
     finally:
         await engine.dispose()
 
@@ -107,7 +110,7 @@ async def test_concurrent_startups_serialize_migrations(postgres_dsn: SecretStr)
             tasks.create_task(migrate_database(engine))
         async with engine.connect() as connection:
             assert await connection.scalar(text("SELECT version_num FROM alembic_version")) == (
-                "0002_chat_turns"
+                "0003_status_sessions"
             )
     finally:
         await engine.dispose()
