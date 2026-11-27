@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "themed-chat.fullname" . }}
+  labels:
+    {{- include "themed-chat.selector" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "themed-chat.selector" . | nindent 4 }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http

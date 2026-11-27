@@ -22,3 +22,4 @@ references: {}
 - [#12 Move database deployment out of application YAML](0012-compose-storage.md)
 - [#13 Use PostgreSQL as the only database](0013-postgresql-only.md)
 - [#14 Consolidate local Docker Compose](0014-local-compose.md)
+- [#15 Deploy the chat with Helm](0015-helm-chart.md)

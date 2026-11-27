@@ -1,0 +1,15 @@
+image:
+  repository: ""
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+existingSecret: ""
+publicOrigin: http://127.0.0.1:8000
+# Optional Secret with a ca.crt key for a non-public PostgreSQL CA.
+postgresCASecret: ""
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi

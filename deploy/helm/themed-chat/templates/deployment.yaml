@@ -1,0 +1,87 @@
+{{- $secret := required "existingSecret is required (name of a Kubernetes Secret)" .Values.existingSecret -}}
+{{- $repository := required "image.repository is required" .Values.image.repository -}}
+{{- $tag := required "image.tag is required" .Values.image.tag -}}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "themed-chat.fullname" . }}
+  labels:
+    {{- include "themed-chat.selector" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "themed-chat.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "themed-chat.selector" . | nindent 8 }}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: chat
+          image: {{ printf "%s:%s" $repository (toString $tag) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: APP_AUTH__PUBLIC_ORIGIN
+              value: {{ required "publicOrigin is required" .Values.publicOrigin | quote }}
+            {{- range list "APP_ACCESS_KEY" "APP_SESSION_SECRET" "GEMINI_API_KEY" "DATABASE_URL" }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secret | quote }}
+                  key: {{ . }}
+            {{- end }}
+            - name: PGSSLROOTCERT
+              {{- if .Values.postgresCASecret }}
+              value: /etc/postgres-ca/ca.crt
+              {{- else }}
+              value: /etc/ssl/certs/ca-certificates.crt
+              {{- end }}
+          startupProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 2
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /healthz, port: http }
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.postgresCASecret }}
+          volumeMounts:
+            - name: postgres-ca
+              mountPath: /etc/postgres-ca
+              readOnly: true
+          {{- end }}
+      {{- if .Values.postgresCASecret }}
+      volumes:
+        - name: postgres-ca
+          secret:
+            secretName: {{ .Values.postgresCASecret | quote }}
+            items:
+              - key: ca.crt
+                path: ca.crt
+      {{- end }}
