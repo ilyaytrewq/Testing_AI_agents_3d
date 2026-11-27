@@ -2,7 +2,7 @@
 title: "Support OpenAI-compatible text generation"
 description: "Select the native Gemini or OpenAI-compatible chat adapter in Compose and Helm."
 id: 17
-status: "In progress"
+status: "Done"
 labels: []
 weight: 2
 references: {}
