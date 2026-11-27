@@ -14,7 +14,11 @@ class _CompatibleClient(AsyncOpenAI):
     @property
     def default_headers(self) -> dict[str, str | Omit]:
         # The SDK otherwise imports ambient OpenAI headers, including credentials.
-        return {"Accept": "application/json", "Content-Type": "application/json"}
+        return {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            **self.auth_headers,
+        }
 
 
 class OpenAICompatibleGenerator:
