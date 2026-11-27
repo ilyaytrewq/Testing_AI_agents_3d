@@ -2,7 +2,7 @@
 title: "Consolidate project documentation"
 description: "Keep operational instructions in the README and remove the redundant Python version file."
 id: 16
-status: "In progress"
+status: "Done"
 labels: []
 weight: 1
 references: {}
