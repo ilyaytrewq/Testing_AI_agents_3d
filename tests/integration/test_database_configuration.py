@@ -19,6 +19,7 @@ from themed_chat.settings import (
 @pytest.fixture
 def deployment_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("APP_LOCAL_POSTGRES_PASSWORD", raising=False)
     for name, value in {
         "APP_ACCESS_KEY": "compose_fixture_key",
         "APP_SESSION_SECRET": "test-database-signing-secret-not-production",
@@ -44,6 +45,28 @@ async def test_reads_postgresql_dsn_from_dotenv(cloud_env: Path) -> None:
         assert engine.url.host == "database.test"
     finally:
         await engine.dispose()
+
+
+@pytest.mark.anyio
+async def test_local_compose_encodes_password_in_postgresql_dsn(
+    deployment_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("APP_LOCAL_POSTGRES_PASSWORD", "a@b:/c#d%")
+    engine = create_database_engine(load_settings(env_file=deployment_env))
+    try:
+        assert engine.url.host == "postgres"
+        assert engine.url.password == "a@b:/c#d%"
+        assert engine.url.query["ssl"] == "disable"
+    finally:
+        await engine.dispose()
+
+
+def test_local_compose_rejects_external_dsn_instead_of_overriding_it(
+    cloud_env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("APP_LOCAL_POSTGRES_PASSWORD", "local-fixture")
+    with pytest.raises(ConfigurationError, match="DATABASE_URL.*local PostgreSQL"):
+        load_settings(env_file=cloud_env)
 
 
 def test_application_requires_postgresql_dsn_even_with_a_legacy_file_path(

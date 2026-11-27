@@ -3,7 +3,7 @@ from os import environ
 from pathlib import Path
 from re import compile as compile_pattern
 from typing import Annotated, Literal, Self
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from dotenv import dotenv_values
 from pydantic import (
@@ -168,6 +168,19 @@ def load_settings(
             for name in SECRET_NAMES
             if (value := environ.get(name, file_values.get(name))) is not None
         }
+        local_password = environ.get("APP_LOCAL_POSTGRES_PASSWORD")
+        if local_password is not None:
+            if "DATABASE_URL" in secret_values:
+                raise ConfigurationError(
+                    "DATABASE_URL cannot be combined with local PostgreSQL. "
+                    "Use only the base Compose file for an external database."
+                )
+            if not local_password.strip():
+                raise ConfigurationError("POSTGRES_PASSWORD must not be blank.")
+            password = quote(local_password, safe="")
+            secret_values["DATABASE_URL"] = (
+                f"postgresql+asyncpg://themed_chat:{password}@postgres:5432/themed_chat?ssl=disable"
+            )
         secrets = SecretSettings.model_validate(secret_values)
     except ValidationError as error:
         locations = {str(e["loc"][0]) for e in error.errors() if e["loc"]}

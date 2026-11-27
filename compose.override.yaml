@@ -1,7 +1,7 @@
 services:
   chat:
     environment:
-      DATABASE_URL: postgresql+asyncpg://themed_chat:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env for local PostgreSQL}@postgres:5432/themed_chat?ssl=disable
+      APP_LOCAL_POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env for local PostgreSQL}
     depends_on:
       postgres:
         condition: service_healthy
