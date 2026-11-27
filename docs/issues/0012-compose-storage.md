@@ -2,7 +2,7 @@
 title: "Move database deployment out of application YAML"
 description: "Keep local persistence in the Compose volume and select external PostgreSQL with a secret DSN."
 id: 12
-status: "In progress"
+status: "Done"
 labels: []
 weight: 1
 references: {}
